@@ -6,9 +6,11 @@ import { FaLink, FaHeading, FaImage, FaExternalLinkAlt, FaWordpress, FaChartLine
 function App() {
   const [url, setUrl] = useState('');
   const [seoData, setSeoData] = useState(null);
+  const [loading, setLoading] = useState(false);  // Estado para mostrar carga
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);  // Inicia la carga
 
     const res = await fetch('/api/scrape', {
       method: 'POST',
@@ -18,6 +20,7 @@ function App() {
 
     const data = await res.json();
     setSeoData(data);
+    setLoading(false);  // Finaliza la carga
   };
 
   return (
@@ -42,7 +45,7 @@ function App() {
               />
             </div>
             <button type="submit" className="btn btn-primary w-100">
-              Analizar
+              {loading ? 'Analizando...' : 'Analizar'}
             </button>
           </form>
         </div>
