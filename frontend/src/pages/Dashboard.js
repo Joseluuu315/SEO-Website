@@ -5,9 +5,18 @@ const Dashboard = () => {
   const { user, token, logout } = useAuth();
   const [url, setUrl] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const [loadingSession, setLoadingSession] = React.useState(false);
+  const [aiMode, setAiMode] = React.useState(true);
+  const [aiLoading, setAiLoading] = React.useState(false);
   const [error, setError] = React.useState('');
   const [result, setResult] = React.useState(null);
   const [history, setHistory] = React.useState([]);
+  const [activeSessionId, setActiveSessionId] = React.useState(null);
+
+  const exampleUrls = React.useMemo(
+    () => ['https://example.com', 'https://wikipedia.org', 'https://developer.mozilla.org'],
+    []
+  );
 
   const fetchHistory = React.useCallback(async () => {
     if (!token) return;
@@ -27,10 +36,64 @@ const Dashboard = () => {
     fetchHistory();
   }, [fetchHistory]);
 
+  const openSession = async (id) => {
+    if (!token) return;
+    setError('');
+    setLoadingSession(true);
+    try {
+      const res = await fetch(`/api/history/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.error || 'No se pudo abrir la sesión');
+        setLoadingSession(false);
+        return;
+      }
+      setActiveSessionId(id);
+      setResult(data);
+      setUrl(data.url || '');
+      setLoadingSession(false);
+    } catch {
+      setError('Error al abrir la sesión');
+      setLoadingSession(false);
+    }
+  };
+
+  const generateAiForSession = async () => {
+    if (!token || !activeSessionId) return;
+    setAiLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/ai-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ id: activeSessionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.error || 'No se pudo generar el informe IA');
+        setAiLoading(false);
+        return;
+      }
+
+      setResult((prev) => prev ? ({ ...prev, aiReport: data.report, aiModel: data.model }) : prev);
+      await fetchHistory();
+      setAiLoading(false);
+    } catch {
+      setError('Error al generar el informe IA');
+      setAiLoading(false);
+    }
+  };
+
   const runAnalysis = async (e) => {
     e.preventDefault();
     setError('');
     setResult(null);
+    setActiveSessionId(null);
 
     const nextUrl = url.trim();
     if (!nextUrl) {
@@ -40,7 +103,8 @@ const Dashboard = () => {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/scrape', {
+      const endpoint = aiMode ? '/api/ai-analyze' : '/api/scrape';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -57,6 +121,7 @@ const Dashboard = () => {
       }
 
       setResult(data);
+      if (data?._id) setActiveSessionId(data._id);
       await fetchHistory();
       setLoading(false);
     } catch {
@@ -92,15 +157,22 @@ const Dashboard = () => {
             <div className="flex items-center gap-3">
               <button
                 type="button"
+                onClick={() => setAiMode(v => !v)}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 shadow-glow backdrop-blur hover:bg-white/10 transition active:scale-[0.99]"
+              >
+                IA: <span className="text-white">{aiMode ? 'ON' : 'OFF'}</span>
+              </button>
+              <button
+                type="button"
                 onClick={fetchHistory}
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 shadow-glow backdrop-blur hover:bg-white/10 transition"
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 shadow-glow backdrop-blur hover:bg-white/10 transition active:scale-[0.99]"
               >
                 Actualizar
               </button>
               <button
                 type="button"
                 onClick={logout}
-                className="rounded-2xl bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-emerald-400 bg-[length:200%_200%] px-4 py-2 text-sm font-semibold text-ink-950 shadow-glow transition hover:opacity-95 hover:animate-shimmer"
+                className="rounded-2xl bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-emerald-400 bg-[length:200%_200%] px-4 py-2 text-sm font-semibold text-ink-950 shadow-glow transition hover:opacity-95 hover:animate-shimmer active:scale-[0.99]"
               >
                 Cerrar sesión
               </button>
@@ -119,6 +191,22 @@ const Dashboard = () => {
                 <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/70">
                   Token: <span className="text-white/90">{token ? 'OK' : 'NO'}</span>
                 </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
+                  Modo: <span className="text-white/90">{aiMode ? 'Experto IA' : 'Rápido'}</span>
+                </div>
+                {loadingSession && (
+                  <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
+                    Abriendo sesión...
+                  </div>
+                )}
+                {activeSessionId && (
+                  <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
+                    Sesión: <span className="text-white/90">{String(activeSessionId).slice(-6)}</span>
+                  </div>
+                )}
               </div>
 
               <form onSubmit={runAnalysis} className="mt-5 grid gap-3">
@@ -143,6 +231,19 @@ const Dashboard = () => {
                       'Analizar'
                     )}
                   </button>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {exampleUrls.map((u) => (
+                    <button
+                      key={u}
+                      type="button"
+                      onClick={() => setUrl(u)}
+                      className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70 hover:bg-white/10 transition"
+                    >
+                      {u.replace('https://', '')}
+                    </button>
+                  ))}
                 </div>
 
                 {error && (
@@ -174,7 +275,7 @@ const Dashboard = () => {
                   <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                       <div className="text-xs text-white/60">Meta</div>
-                      <div className="mt-1 text-sm text-white/80 line-clamp-3">{result.description}</div>
+                      <div className="mt-1 text-sm text-white/80 max-h-16 overflow-hidden">{result.description}</div>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                       <div className="text-xs text-white/60">Estructura</div>
@@ -235,6 +336,32 @@ const Dashboard = () => {
                       </div>
                     )}
                   </div>
+
+                  <div className="mt-6">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="text-sm font-semibold">Informe experto</div>
+                      {activeSessionId && !result.aiReport && (
+                        <button
+                          type="button"
+                          onClick={generateAiForSession}
+                          disabled={aiLoading}
+                          className="rounded-2xl bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-emerald-400 bg-[length:200%_200%] px-4 py-2 text-sm font-semibold text-ink-950 shadow-glow transition hover:opacity-95 hover:animate-shimmer disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {aiLoading ? 'Generando IA...' : 'Generar informe IA'}
+                        </button>
+                      )}
+                    </div>
+
+                    {result.aiReport ? (
+                      <pre className="mt-3 whitespace-pre-wrap rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80 leading-relaxed">
+                        {result.aiReport}
+                      </pre>
+                    ) : (
+                      <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+                        {aiMode ? 'Si no hay clave de IA configurada en el backend, verás un informe fallback.' : 'Activa el modo IA para generar un informe experto.'}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -257,7 +384,12 @@ const Dashboard = () => {
                   </div>
                 ) : (
                   history.map((h) => (
-                    <div key={h._id} className="rounded-2xl border border-white/10 bg-black/20 p-4 hover:bg-white/5 transition">
+                    <button
+                      type="button"
+                      key={h._id}
+                      onClick={() => openSession(h._id)}
+                      className="text-left rounded-2xl border border-white/10 bg-black/20 p-4 hover:bg-white/5 transition"
+                    >
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
                           <div className="truncate font-semibold">{h.title || '(sin título)'}</div>
@@ -269,7 +401,7 @@ const Dashboard = () => {
                         </div>
                       </div>
                       <div className="mt-3 text-xs text-white/60">{new Date(h.createdAt).toLocaleString()}</div>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>

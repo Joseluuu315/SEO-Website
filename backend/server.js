@@ -1,5 +1,8 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const { URL } = require('url');
@@ -12,6 +15,26 @@ require('dotenv').config({ path: path.join(__dirname, '.env'), override: true })
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey_seo_analyzer_2024';
+
+app.set('trust proxy', 1);
+
+app.use(helmet());
+app.use(morgan('tiny'));
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api', apiLimiter);
+app.use(cors());
+app.use(express.json());
+
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, time: new Date().toISOString() });
+});
 
 // ─── MongoDB Connection ───────────────────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/seoanalyzer', {
@@ -40,10 +63,180 @@ const AnalysisSchema = new mongoose.Schema({
   imageCount: Number, wordCount: Number,
   internalLinks: Number, externalLinks: Number,
   backlinks: Number, traffic: [Number],
-  issues: [{ type: String, severity: String, message: String }],
+  issues: [
+    new mongoose.Schema(
+      {
+        type: { type: String },
+        severity: { type: String },
+        message: { type: String },
+      },
+      { _id: false }
+    ),
+  ],
+  aiReport: { type: String, default: null },
+  aiModel: { type: String, default: null },
+  aiCreatedAt: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
 });
 const Analysis = mongoose.model('Analysis', AnalysisSchema);
+
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || null;
+
+const buildFallbackAiReport = (result) => {
+  const topIssues = Array.isArray(result.issues) ? result.issues.slice(0, 8) : [];
+  const issuesText = topIssues.length
+    ? topIssues.map(i => `- [${i.severity}] ${i.message}`).join('\n')
+    : '- Sin issues detectados por el scanner.';
+
+  return [
+    `Informe SEO (modo sin IA)`,
+    `URL: ${result.url}`,
+    `Score: ${result.seoScore}`,
+    '',
+    'Resumen rápido:',
+    `- Title: ${result.title}`,
+    `- Meta description: ${result.description}`,
+    `- H1/H2/H3: ${result.h1Count}/${result.h2Count}/${result.h3Count}`,
+    `- Palabras: ${result.wordCount}`,
+    `- Imágenes con alt: ${result.imagesWithAlt}/${result.imageCount}`,
+    `- Links internos/externos: ${result.internalLinks}/${result.externalLinks}`,
+    '',
+    'Issues principales:',
+    issuesText,
+    '',
+    'Recomendaciones rápidas:',
+    '- Ajusta Title a 50-60 caracteres y Description a 150-160 (si aplica).',
+    '- Asegura 1 solo H1 y estructura H2/H3 coherente.',
+    '- Sube el contenido por encima de 300 palabras si es bajo.',
+    '- Añade alt a imágenes clave y mejora enlaces internos.',
+  ].join('\n');
+};
+
+const generateAiSeoReport = async ({ url, result }) => {
+  if (!OPENAI_API_KEY) {
+    return { report: buildFallbackAiReport(result), model: 'fallback' };
+  }
+
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const prompt = [
+    'Eres un consultor SEO senior. Genera un informe experto y accionable en español.',
+    'Formato estricto:',
+    '1) Resumen ejecutivo (5-7 líneas)',
+    '2) Puntuación y explicación',
+    '3) Prioridades (P0/P1/P2) con impacto y esfuerzo',
+    '4) Checklist técnico (meta, headings, contenido, imágenes, enlaces, schema, canonical, robots, https)',
+    '5) Quick wins (hoy)',
+    '6) Plan 7 días',
+    '7) Plan 30 días',
+    '',
+    `URL analizada: ${url}`,
+    'Datos del análisis automático (JSON):',
+    JSON.stringify(result, null, 2),
+  ].join('\n');
+
+  let response;
+  try {
+    response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model,
+        messages: [
+          { role: 'system', content: 'Eres un experto SEO técnico y de contenido. Sé específico y práctico.' },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.4,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 20000,
+      }
+    );
+  } catch (err) {
+    const status = err?.response?.status;
+    const detail = err?.response?.data?.error?.message || err?.response?.data || err?.message;
+    const e = new Error(`OpenAI error${status ? ` (${status})` : ''}: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+    e.status = status || 502;
+    throw e;
+  }
+
+  const report = response?.data?.choices?.[0]?.message?.content;
+  if (!report) {
+    return { report: buildFallbackAiReport(result), model: 'fallback' };
+  }
+  return { report, model };
+};
+
+const scrapeUrl = async (url) => {
+  const response = await axios.get(url, {
+    timeout: 12000,
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SEOAnalyzer/1.0)' }
+  });
+
+  const html = response.data;
+  const $ = cheerio.load(html);
+
+  const title = $('title').text().trim() || 'No se encontró título';
+  const description = $('meta[name="description"]').attr('content') || 'No se encontró descripción';
+  const keywordsMeta = $('meta[name="keywords"]').attr('content');
+  const keywords = keywordsMeta ? keywordsMeta.split(',').map(k => k.trim()).filter(Boolean) : [];
+  const canonical = $('link[rel="canonical"]').attr('href') || null;
+  const ogTitle = $('meta[property="og:title"]').attr('content') || null;
+  const ogDescription = $('meta[property="og:description"]').attr('content') || null;
+  const ogImage = $('meta[property="og:image"]').attr('content') || null;
+  const robots = $('meta[name="robots"]').attr('content') || null;
+  const viewport = $('meta[name="viewport"]').attr('content') || null;
+  const charset = $('meta[charset]').attr('charset') || 'No detectado';
+  const lang = $('html').attr('lang') || 'No detectado';
+
+  const h1Count = $('h1').length;
+  const h2Count = $('h2').length;
+  const h3Count = $('h3').length;
+  const h1Text = $('h1').first().text().trim();
+
+  const allImages = $('img');
+  const imageCount = allImages.length;
+  const imagesWithAlt = allImages.filter((_, el) => $(el).attr('alt') && $(el).attr('alt').trim() !== '').length;
+
+  const baseUrl = new URL(url);
+  let internalLinks = 0, externalLinks = 0;
+  $('a[href]').each((_, link) => {
+    const href = $(link).attr('href');
+    if (!href) return;
+    if (href.startsWith('/') || href.includes(baseUrl.hostname)) internalLinks++;
+    else if (href.startsWith('http')) externalLinks++;
+  });
+
+  const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
+  const wordCount = bodyText.split(' ').filter(w => w.length > 0).length;
+
+  const hasSchema = html.includes('application/ld+json') || html.includes('itemtype');
+  const hasSitemap = html.toLowerCase().includes('sitemap');
+  const hasHttps = url.startsWith('https://');
+
+  const backlinks = Math.floor(Math.random() * 500) + 10;
+  const traffic = Array.from({ length: 6 }, () => Math.floor(Math.random() * 5000) + 100);
+
+  const rawData = {
+    title, description, keywords, h1Count, h2Count, h3Count,
+    imageCount, imagesWithAlt, wordCount, internalLinks, externalLinks
+  };
+
+  const { score: seoScore, issues } = calculateSeoScore(rawData);
+
+  return {
+    url, title, description, keywords,
+    canonical, ogTitle, ogDescription, ogImage,
+    robots, viewport, charset, lang,
+    h1Count, h2Count, h3Count, h1Text,
+    imageCount, imagesWithAlt,
+    internalLinks, externalLinks, wordCount,
+    hasSchema, hasSitemap, hasHttps,
+    backlinks, traffic, seoScore, issues,
+  };
+};
 
 // ─── Auth Middleware ──────────────────────────────────────────────────────────
 const authMiddleware = (req, res, next) => {
@@ -73,7 +266,7 @@ app.post('/api/auth/register', async (req, res) => {
     const user = await User.create({ username, email, password: hashed });
     const token = jwt.sign({ id: user._id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
     res.status(201).json({ token, user: { id: user._id, username: user.username, email: user.email } });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Error al registrar usuario' });
   }
 });
@@ -92,8 +285,131 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// ─── Scrape Endpoint ──────────────────────────────────────────────────────────
+const isValidUrl = (string) => {
+  try { new URL(string); return true; } catch { return false; }
+};
+
+app.post('/api/scrape', async (req, res) => {
+  const { url } = req.body;
+  if (!isValidUrl(url))
+    return res.status(400).json({ error: 'URL inválida. Por favor, ingresa una URL válida.' });
+
+  try {
+    const result = await scrapeUrl(url);
+
+    // Save to DB if user token provided
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      const token = authHeader.split(' ')[1];
+      if (!token) return res.status(401).json({ error: 'Token inválido' });
+      let decoded;
+      try {
+        decoded = jwt.verify(token, JWT_SECRET);
+      } catch {
+        return res.status(401).json({ error: 'Token inválido' });
+      }
+
+      try {
+        await Analysis.create({ ...result, userId: decoded.id });
+      } catch (err) {
+        console.error('❌ Error guardando análisis:', err?.message || err);
+        return res.status(500).json({ error: 'Error guardando el análisis en Mongo' });
+      }
+    }
+
+    res.json(result);
+  } catch (error) {
+    if (error.response?.status === 404)
+      return res.status(404).json({ error: 'Página no encontrada (404). Verifica la URL.' });
+    if (error.code === 'ECONNABORTED')
+      return res.status(408).json({ error: 'Tiempo de espera agotado. La página tardó demasiado.' });
+    res.status(500).json({ error: 'No se pudo analizar la URL. Verifica que sea accesible.' });
+  }
+});
+
+// ─── History ─────────────────────────────────────────────────────────────────
+app.get('/api/history', authMiddleware, async (req, res) => {
+  try {
+    const history = await Analysis.find({ userId: req.user.id })
+      .sort({ createdAt: -1 }).limit(20)
+      .select('url title seoScore createdAt');
+    res.json(history);
+  } catch {
+    res.status(500).json({ error: 'Error al obtener historial' });
+  }
+});
+
+app.get('/api/history/:id', authMiddleware, async (req, res) => {
+  try {
+    const analysis = await Analysis.findOne({ _id: req.params.id, userId: req.user.id });
+    if (!analysis) return res.status(404).json({ error: 'Consulta no encontrada' });
+    res.json(analysis);
+  } catch {
+    res.status(400).json({ error: 'ID inválido' });
+  }
+});
+
+app.post('/api/ai-analyze', authMiddleware, async (req, res) => {
+  const { url } = req.body;
+  if (!isValidUrl(url)) {
+    return res.status(400).json({ error: 'URL inválida. Por favor, ingresa una URL válida.' });
+  }
+
+  try {
+    const result = await scrapeUrl(url);
+
+    let aiReport = null;
+    let aiModel = null;
+    try {
+      const ai = await generateAiSeoReport({ url, result });
+      aiReport = ai.report;
+      aiModel = ai.model;
+    } catch (err) {
+      const status = err?.status;
+      if (status === 429) {
+        aiReport = buildFallbackAiReport(result);
+        aiModel = 'fallback_quota';
+      } else {
+        console.error('❌ AI report error:', err?.message || err);
+        return res.status(status || 502).json({ error: err?.message || 'Error generando informe IA' });
+      }
+    }
+
+    const saved = await Analysis.create({
+      ...result,
+      userId: req.user.id,
+      aiReport,
+      aiModel,
+      aiCreatedAt: new Date(),
+    });
+
+    res.json({ ...result, aiReport, aiModel, _id: saved._id });
+  } catch (error) {
+    if (error.response?.status === 404)
+      return res.status(404).json({ error: 'Página no encontrada (404). Verifica la URL.' });
+    if (error.code === 'ECONNABORTED')
+      return res.status(408).json({ error: 'Tiempo de espera agotado. La página tardó demasiado.' });
+    res.status(500).json({ error: 'No se pudo analizar la URL con IA.' });
+  }
+});
+
+app.post('/api/ai-report', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.body;
+    const analysis = await Analysis.findOne({ _id: id, userId: req.user.id });
+    if (!analysis) return res.status(404).json({ error: 'Consulta no encontrada' });
+
+    const { report, model } = await generateAiSeoReport({ url: analysis.url, result: analysis.toObject() });
+    await Analysis.updateOne({ _id: id }, { aiReport: report, aiModel: model, aiCreatedAt: new Date() });
+    res.json({ report, model });
+  } catch {
+    res.status(500).json({ error: 'Error al generar informe de IA' });
+  }
+});
+
 // ─── SEO Score Calculator ─────────────────────────────────────────────────────
-const calculateSeoScore = (data) => {
+function calculateSeoScore(data) {
   let score = 100;
   const issues = [];
 
@@ -138,114 +454,6 @@ const calculateSeoScore = (data) => {
   }
 
   return { score: Math.max(0, score), issues };
-};
-
-// ─── Scrape Endpoint ──────────────────────────────────────────────────────────
-const isValidUrl = (string) => {
-  try { new URL(string); return true; } catch { return false; }
-};
-
-app.post('/api/scrape', async (req, res) => {
-  const { url } = req.body;
-  if (!isValidUrl(url))
-    return res.status(400).json({ error: 'URL inválida. Por favor, ingresa una URL válida.' });
-
-  try {
-    const response = await axios.get(url, {
-      timeout: 12000,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SEOAnalyzer/1.0)' }
-    });
-    const html = response.data;
-    const $ = cheerio.load(html);
-
-    const title = $('title').text().trim() || 'No se encontró título';
-    const description = $('meta[name="description"]').attr('content') || 'No se encontró descripción';
-    const keywordsMeta = $('meta[name="keywords"]').attr('content');
-    const keywords = keywordsMeta ? keywordsMeta.split(',').map(k => k.trim()).filter(Boolean) : [];
-    const canonical = $('link[rel="canonical"]').attr('href') || null;
-    const ogTitle = $('meta[property="og:title"]').attr('content') || null;
-    const ogDescription = $('meta[property="og:description"]').attr('content') || null;
-    const ogImage = $('meta[property="og:image"]').attr('content') || null;
-    const robots = $('meta[name="robots"]').attr('content') || null;
-    const viewport = $('meta[name="viewport"]').attr('content') || null;
-    const charset = $('meta[charset]').attr('charset') || 'No detectado';
-    const lang = $('html').attr('lang') || 'No detectado';
-
-    const h1Count = $('h1').length;
-    const h2Count = $('h2').length;
-    const h3Count = $('h3').length;
-    const h1Text = $('h1').first().text().trim();
-
-    const allImages = $('img');
-    const imageCount = allImages.length;
-    const imagesWithAlt = allImages.filter((_, el) => $(el).attr('alt') && $(el).attr('alt').trim() !== '').length;
-
-    const baseUrl = new URL(url);
-    let internalLinks = 0, externalLinks = 0;
-    $('a[href]').each((_, link) => {
-      const href = $(link).attr('href');
-      if (!href) return;
-      if (href.startsWith('/') || href.includes(baseUrl.hostname)) internalLinks++;
-      else if (href.startsWith('http')) externalLinks++;
-    });
-
-    const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
-    const wordCount = bodyText.split(' ').filter(w => w.length > 0).length;
-
-    const hasSchema = html.includes('application/ld+json') || html.includes('itemtype');
-    const hasSitemap = html.toLowerCase().includes('sitemap');
-    const hasHttps = url.startsWith('https://');
-
-    const backlinks = Math.floor(Math.random() * 500) + 10;
-    const traffic = Array.from({ length: 6 }, () => Math.floor(Math.random() * 5000) + 100);
-
-    const rawData = {
-      title, description, keywords, h1Count, h2Count, h3Count,
-      imageCount, imagesWithAlt, wordCount, internalLinks, externalLinks
-    };
-
-    const { score: seoScore, issues } = calculateSeoScore(rawData);
-
-    const result = {
-      url, title, description, keywords,
-      canonical, ogTitle, ogDescription, ogImage,
-      robots, viewport, charset, lang,
-      h1Count, h2Count, h3Count, h1Text,
-      imageCount, imagesWithAlt,
-      internalLinks, externalLinks, wordCount,
-      hasSchema, hasSitemap, hasHttps,
-      backlinks, traffic, seoScore, issues,
-    };
-
-    // Save to DB if user token provided
-    try {
-      const token = req.headers.authorization?.split(' ')[1];
-      if (token) {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        await Analysis.create({ ...result, userId: decoded.id });
-      }
-    } catch {}
-
-    res.json(result);
-  } catch (error) {
-    if (error.response?.status === 404)
-      return res.status(404).json({ error: 'Página no encontrada (404). Verifica la URL.' });
-    if (error.code === 'ECONNABORTED')
-      return res.status(408).json({ error: 'Tiempo de espera agotado. La página tardó demasiado.' });
-    res.status(500).json({ error: 'No se pudo analizar la URL. Verifica que sea accesible.' });
-  }
-});
-
-// ─── History ─────────────────────────────────────────────────────────────────
-app.get('/api/history', authMiddleware, async (req, res) => {
-  try {
-    const history = await Analysis.find({ userId: req.user.id })
-      .sort({ createdAt: -1 }).limit(20)
-      .select('url title seoScore createdAt');
-    res.json(history);
-  } catch {
-    res.status(500).json({ error: 'Error al obtener historial' });
-  }
-});
+}
 
 app.listen(PORT, () => console.log(`✅ Servidor escuchando en http://localhost:${PORT}`));
