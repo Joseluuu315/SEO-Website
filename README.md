@@ -1,26 +1,127 @@
-# Analizador SEO
+# ⚡ SEOPro — Analizador SEO Profesional
 
-🔍 **Analizador SEO** es una herramienta web interactiva que permite analizar métricas clave de SEO de cualquier sitio web. Este proyecto ayuda a los usuarios a obtener información valiosa sobre el SEO de su página web, como el número de enlaces internos y externos, las palabras clave, el tráfico estimado y mucho más.
+Una plataforma de análisis SEO full-stack con autenticación, puntuación automática y detección de problemas.
 
-## Características
+---
 
-- **Análisis SEO rápido**: Ingresa una URL y obtén métricas SEO clave al instante.
-- **Resultados visuales**: Visualiza la información de forma clara con gráficos interactivos.
-- **Optimización de contenido**: Consulta el uso de encabezados, imágenes y enlaces en la página web.
-- **Tráfico estimado**: Gráfico que muestra el tráfico estimado para la página en los últimos meses.
+## 🗂 Estructura del proyecto
 
-## Tecnologías Utilizadas
+```
+seo-analyzer/
+├── backend/
+│   ├── server.js          ← Servidor Express + API + Auth + Scraping
+│   ├── package.json
+│   └── .env
+└── frontend/
+    ├── public/
+    └── src/
+        ├── App.js                    ← Router principal
+        ├── index.js
+        ├── index.css
+        ├── context/
+        │   └── AuthContext.js        ← Estado global de autenticación
+        └── pages/
+            ├── Login.js              ← Página de login
+            ├── Register.js           ← Página de registro
+            ├── Auth.css              ← Estilos de auth
+            ├── Dashboard.js          ← Panel principal de análisis
+            └── Dashboard.css         ← Estilos del dashboard
+```
 
-### Frontend
-- **React**: Biblioteca de JavaScript para construir interfaces de usuario.
-- **Bootstrap**: Framework CSS para un diseño responsivo y estilizado.
-- **Recharts**: Biblioteca para la visualización de datos mediante gráficos interactivos.
-- **React Icons**: Para mostrar iconos visuales.
+---
 
-### Backend
-- **Node.js**: Entorno de ejecución para JavaScript en el backend.
-- **Express**: Framework de Node.js para crear aplicaciones web.
-- **Cheerio**: Librería para el raspado (scraping) de datos HTML de páginas web.
-- **Axios**: Para realizar solicitudes HTTP y manejar las respuestas del servidor.
+## 🚀 Instalación y puesta en marcha
 
+### 1. Backend
 
+```bash
+cd backend
+npm install
+```
+
+Edita el archivo `.env`:
+```
+PORT=5000
+MONGO_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/seoanalyzer
+JWT_SECRET=tu_clave_secreta_muy_segura
+```
+
+```bash
+npm run dev    # desarrollo (con nodemon)
+npm start      # producción
+```
+
+### 2. Frontend
+
+```bash
+cd frontend
+npm install
+npm start
+```
+
+El frontend tiene configurado `"proxy": "http://localhost:5000"` en `package.json`, por lo que las llamadas a `/api/*` se redirigen automáticamente al backend.
+
+---
+
+## ✨ Funcionalidades
+
+### Autenticación
+- Registro con username, email y contraseña
+- Login con JWT (7 días de duración)
+- Rutas protegidas — el dashboard requiere login
+- Sesión persistente en localStorage
+
+### Análisis SEO
+- **Puntuación SEO** (0–100) calculada automáticamente
+- **Metadatos**: título, descripción, canonical, OG tags, robots, viewport, lang, charset
+- **Encabezados**: conteo de H1, H2, H3 + texto del primer H1
+- **Imágenes**: total y cuántas tienen atributo `alt`
+- **Contenido**: conteo de palabras
+- **Enlaces**: internos, externos y backlinks estimados
+- **Técnico**: HTTPS, Schema.org, canonical, viewport
+- **Open Graph**: og:title, og:description, og:image
+- **Problemas priorizados**: alta, media y baja severidad
+- **Tráfico estimado**: gráfico de área de los últimos 6 meses
+- **Guardado de historial** en MongoDB (si el usuario está autenticado)
+
+### UI/UX
+- Diseño dark mode profesional
+- Sidebar de navegación
+- 4 tabs: Resumen, Técnico, Contenido, Problemas
+- Ring de puntuación animado
+- Responsive (mobile-friendly)
+- Animaciones suaves
+
+---
+
+## 🛠 Stack tecnológico
+
+**Backend**: Node.js, Express, Mongoose (MongoDB), Cheerio, Axios, JWT, Bcrypt  
+**Frontend**: React 18, React Router v6, Recharts, React Icons
+
+---
+
+## 🔑 Variables de entorno
+
+| Variable | Descripción |
+|---|---|
+| `PORT` | Puerto del servidor (default: 5000) |
+| `MONGO_URI` | URI de conexión MongoDB Atlas |
+| `JWT_SECRET` | Clave secreta para firmar tokens JWT |
+
+---
+
+## 📦 Dependencias backend
+
+```json
+{
+  "axios": "^1.6.0",
+  "bcryptjs": "^2.4.3",
+  "cheerio": "^1.0.0-rc.12",
+  "cors": "^2.8.5",
+  "dotenv": "^16.0.3",
+  "express": "^4.18.2",
+  "jsonwebtoken": "^9.0.0",
+  "mongoose": "^7.5.0"
+}
+```
