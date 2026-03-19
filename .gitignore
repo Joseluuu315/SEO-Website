@@ -21,7 +21,9 @@ logs/
 ### Environment files
 .env
 .env.*
+backend/.env.local
 backend/.env
+frontend/.env.local
 frontend/.env
 
 ### Runtime
