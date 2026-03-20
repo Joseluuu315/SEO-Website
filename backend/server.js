@@ -37,17 +37,22 @@ app.get('/api/health', (req, res) => {
 });
 
 // ─── MongoDB Connection ───────────────────────────────────────────────────────
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/seoanalyzer', {
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/seoanalyzer';
+
+mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 4000,
+  connectTimeoutMS: 4000,
 }).then(() => console.log('✅ MongoDB conectado'))
   .catch(err => console.error('❌ MongoDB error:', err.message));
 
 // ─── Models ──────────────────────────────────────────────────────────────────
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, trim: true },
-  email:    { type: String, required: true, unique: true, lowercase: true },
+  email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
+  role: { type: String, enum: ['trial', 'paid', 'admin'], default: 'trial' },
   createdAt: { type: Date, default: Date.now },
 });
 const User = mongoose.model('User', UserSchema);
@@ -79,6 +84,15 @@ const AnalysisSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 const Analysis = mongoose.model('Analysis', AnalysisSchema);
+
+const SiteSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  name: { type: String, required: true },
+  url: { type: String, required: true },
+  notes: { type: String },
+  createdAt: { type: Date, default: Date.now },
+});
+const Site = mongoose.model('Site', SiteSchema);
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || null;
 
@@ -263,9 +277,10 @@ app.post('/api/auth/register', async (req, res) => {
     if (existing) return res.status(409).json({ error: 'El usuario o email ya existe' });
 
     const hashed = await bcrypt.hash(password, 12);
-    const user = await User.create({ username, email, password: hashed });
-    const token = jwt.sign({ id: user._id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ token, user: { id: user._id, username: user.username, email: user.email } });
+    const role = email === 'joselufupa2016@gmail.com' ? 'admin' : 'trial';
+    const user = await User.create({ username, email, password: hashed, role });
+    const token = jwt.sign({ id: user._id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({ token, user: { id: user._id, username: user.username, email: user.email, role: user.role } });
   } catch {
     res.status(500).json({ error: 'Error al registrar usuario' });
   }
@@ -278,8 +293,8 @@ app.post('/api/auth/login', async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Credenciales incorrectas' });
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
-    const token = jwt.sign({ id: user._id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user._id, username: user.username, email: user.email } });
+    const token = jwt.sign({ id: user._id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: user._id, username: user.username, email: user.email, role: user.role } });
   } catch {
     res.status(500).json({ error: 'Error al iniciar sesión' });
   }
@@ -328,10 +343,107 @@ app.post('/api/scrape', async (req, res) => {
   }
 });
 
+// ─── Profile Management ─────────────────────────────────────────────────
+app.put('/api/auth/profile', authMiddleware, async (req, res) => {
+  try {
+    const { username, email, currentPassword, newPassword } = req.body;
+    if (!currentPassword && (newPassword || username !== req.user.username || email !== req.user.email)) {
+      return res.status(400).json({ error: 'Debes introducir tu contraseña actual para guardar cambios' });
+    }
+    if (newPassword && newPassword.length < 6) {
+      return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
+    }
+    const payload = {};
+    if (username !== req.user.username) payload.username = username;
+    if (email !== req.user.email) payload.email = email;
+    if (newPassword) payload.password = await bcrypt.hash(newPassword, 12);
+    if (Object.keys(payload).length === 0) {
+      return res.status(400).json({ error: 'No hay cambios que guardar' });
+    }
+    // Verify current password before any change
+    if (currentPassword) {
+      const user = await User.findById(req.user.id);
+      const valid = await bcrypt.compare(currentPassword, user.password);
+      if (!valid) {
+        return res.status(401).json({ error: 'Contraseña actual incorrecta' });
+      }
+    }
+    const updated = await User.findByIdAndUpdate(req.user.id, payload, { new: true });
+    res.json({ message: 'Perfil actualizado', user: { id: updated._id, username: updated.username, email: updated.email, role: updated.role } });
+  } catch (e) {
+    res.status(500).json({ error: 'Error al actualizar perfil' });
+  }
+});
+
+// ─── Sites Routes ───────────────────────────────────────────────────────────
+app.get('/api/sites', authMiddleware, async (req, res) => {
+  try {
+    const sites = await Site.find({ userId: req.user.id });
+    res.json(sites);
+  } catch (e) {
+    res.status(500).json({ error: 'Error obteniendo sitios' });
+  }
+});
+
+app.post('/api/sites', authMiddleware, async (req, res) => {
+  try {
+    const { name, url, notes } = req.body;
+    if (!name || !url) return res.status(400).json({ error: 'Nombre y URL obligatorios' });
+    const site = await Site.create({ userId: req.user.id, name, url, notes });
+    res.status(201).json(site);
+  } catch (e) {
+    res.status(500).json({ error: 'Error creando sitio' });
+  }
+});
+
+app.put('/api/sites/:id', authMiddleware, async (req, res) => {
+  try {
+    const site = await Site.findOne({ _id: req.params.id, userId: req.user.id });
+    if (!site) return res.status(404).json({ error: 'Sitio no encontrado' });
+    const { name, url, notes } = req.body;
+    Object.assign(site, { name, url, notes });
+    await site.save();
+    res.json(site);
+  } catch (e) {
+    res.status(500).json({ error: 'Error actualizando sitio' });
+  }
+});
+
+app.delete('/api/sites/:id', authMiddleware, async (req, res) => {
+  try {
+    const site = await Site.findOne({ _id: req.params.id, userId: req.user.id });
+    if (!site) return res.status(404).json({ error: 'Sitio no encontrado' });
+    await Analysis.deleteMany({ userId: req.user.id, url: site.url });
+    await Site.deleteOne({ _id: req.params.id });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Error eliminando sitio' });
+  }
+});
+
+// ─── Reports Routes ──────────────────────────────────────────────────────────
+app.post('/api/reports/generate', authMiddleware, async (req, res) => {
+  try {
+    const { template, dateRange } = req.body;
+    // TODO: generate PDF report based on template and dateRange
+    res.json({ url: 'https://example.com/report.pdf' });
+  } catch (e) {
+    res.status(500).json({ error: 'Error generando reporte' });
+  }
+});
+
 // ─── History ─────────────────────────────────────────────────────────────────
 app.get('/api/history', authMiddleware, async (req, res) => {
   try {
-    const history = await Analysis.find({ userId: req.user.id })
+    const { siteId } = req.query;
+    const filter = { userId: req.user.id };
+    if (siteId) {
+      // Find site by ID to get its URL, then filter analyses by that URL
+      const site = await Site.findOne({ _id: siteId, userId: req.user.id });
+      if (!site) return res.status(404).json({ error: 'Sitio no encontrado' });
+      filter.url = site.url;
+    }
+    const history = await Analysis.find(filter)
       .sort({ createdAt: -1 }).limit(20)
       .select('url title seoScore createdAt');
     res.json(history);

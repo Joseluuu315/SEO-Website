@@ -27,10 +27,27 @@ const Dashboard = () => {
   const [historyQuery, setHistoryQuery] = React.useState('');
   const [activeTab, setActiveTab] = React.useState('resumen');
 
-  const exampleUrls = React.useMemo(
-    () => ['https://example.com', 'https://wikipedia.org', 'https://developer.mozilla.org'],
-    []
-  );
+  const exampleUrls = [
+    'https://www.shopify.com/',
+    'https://stripe.com/',
+    'https://www.notion.so/',
+    'https://www.producthunt.com/',
+    'https://www.airstory.io/',
+    'https://www.semrush.com/',
+    'https://ahrefs.com/',
+    'https://moz.com/',
+    'https://backlinko.com/',
+    'https://blog.cloudflare.com/',
+    'https://www.shopify.com/blog',
+    'https://stripe.com/blog',
+    'https://www.notion.so/blog',
+    'https://www.producthunt.com/',
+    'https://www.airstory.io/blog',
+    'https://www.semrush.com/blog',
+    'https://ahrefs.com/blog',
+    'https://moz.com/blog',
+    'https://backlinko.com/',
+  ];
 
   const avatarText = React.useMemo(() => {
     const base = user?.username || user?.email || 'U';
@@ -366,31 +383,38 @@ const Dashboard = () => {
             <div className="mt-6 grid gap-2">
               <button
                 type="button"
-                onClick={() => setActiveTab('resumen')}
-                className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${activeTab === 'resumen' ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100' : 'border-white/10 bg-black/20 text-white/70 hover:bg-white/5'}`}
+                onClick={() => window.location.href = '/'}
+                className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${window.location.pathname === '/' ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100' : 'border-white/10 bg-black/20 text-white/70 hover:bg-white/5'}`}
               >
                 Panel
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab('issues')}
-                className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${activeTab === 'issues' ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100' : 'border-white/10 bg-black/20 text-white/70 hover:bg-white/5'}`}
+                onClick={() => window.location.href = '/compare'}
+                className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${window.location.pathname === '/compare' ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100' : 'border-white/10 bg-black/20 text-white/70 hover:bg-white/5'}`}
               >
-                Issues
+                Comparar
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab('informe')}
-                className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${activeTab === 'informe' ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100' : 'border-white/10 bg-black/20 text-white/70 hover:bg-white/5'}`}
+                onClick={() => window.location.href = '/sites'}
+                className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${window.location.pathname === '/sites' ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100' : 'border-white/10 bg-black/20 text-white/70 hover:bg-white/5'}`}
               >
-                Informe
+                Sitios
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab('tendencia')}
-                className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${activeTab === 'tendencia' ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100' : 'border-white/10 bg-black/20 text-white/70 hover:bg-white/5'}`}
+                onClick={() => window.location.href = '/reports'}
+                className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${window.location.pathname === '/reports' ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100' : 'border-white/10 bg-black/20 text-white/70 hover:bg-white/5'}`}
               >
-                Tendencia
+                Informes
+              </button>
+              <button
+                type="button"
+                onClick={() => window.location.href = '/settings'}
+                className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${window.location.pathname === '/settings' ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100' : 'border-white/10 bg-black/20 text-white/70 hover:bg-white/5'}`}
+              >
+                Ajustes
               </button>
             </div>
 
@@ -777,7 +801,7 @@ const Dashboard = () => {
                   </ResponsiveContainer>
                 </div>
               )}
-            </div>
+          </div>
           </main>
         </div>
         </div>

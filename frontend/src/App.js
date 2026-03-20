@@ -1,9 +1,18 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import Compare from './pages/Compare';
+import Sites from './pages/Sites';
+import Reports from './pages/Reports';
+import Settings from './pages/Settings';
+import Profile from './pages/Profile';
+import Help from './pages/Help';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -19,11 +28,21 @@ const PrivateRoute = ({ children }) => {
 function AppRoutes() {
   const { user } = useAuth();
   return (
-    <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
-      <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
-      <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-    </Routes>
+    <Layout>
+      <Routes>
+        <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
+        <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
+        <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+        <Route path="/compare" element={<PrivateRoute><Compare /></PrivateRoute>} />
+        <Route path="/sites" element={<PrivateRoute><Sites /></PrivateRoute>} />
+        <Route path="/reports" element={<PrivateRoute><Reports /></PrivateRoute>} />
+        <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+        <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+        <Route path="/help" element={<Help />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+      </Routes>
+    </Layout>
   );
 }
 
