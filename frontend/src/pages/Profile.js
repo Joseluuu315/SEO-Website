@@ -2,22 +2,36 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 const Profile = () => {
-  const { user, token, logout } = useAuth();
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ username: '', email: '', currentPassword: '', newPassword: '' });
+  const { user, token } = useAuth();
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    username: '',
+    email: '',
+    currentPassword: '',
+    newPassword: ''
+  });
 
   useEffect(() => {
     if (user) {
-      setForm({ username: user.username || '', email: user.email || '', currentPassword: '', newPassword: '' });
+      setForm({
+        username: user.username || '',
+        email: user.email || '',
+        currentPassword: '',
+        newPassword: ''
+      });
     }
   }, [user]);
+
+  const showMsg = (text, type = 'success') => {
+    setMessage(text);
+    setTimeout(() => setMessage(''), 3000);
+  };
 
   const handleSave = async (e) => {
     e.preventDefault();
     if (!form.currentPassword && (form.newPassword || form.username !== user?.username || form.email !== user?.email)) {
-      setMessage('Debes introducir tu contraseña actual para guardar cambios');
+      showMsg('Debes introducir tu contraseña actual para guardar cambios', 'error');
       return;
     }
     setLoading(true);
@@ -28,7 +42,7 @@ const Profile = () => {
       if (form.email !== user?.email) payload.email = form.email;
       if (form.newPassword) payload.password = form.newPassword;
       if (Object.keys(payload).length === 0) {
-        setMessage('No hay cambios que guardar');
+        showMsg('No hay cambios que guardar', 'info');
         setLoading(false);
         return;
       }
@@ -42,147 +56,124 @@ const Profile = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error');
-      setMessage('Perfil actualizado correctamente');
-      setEditing(false);
+      showMsg('Perfil actualizado correctamente');
       setForm({ ...form, currentPassword: '', newPassword: '' });
-      setTimeout(() => setMessage(''), 3000);
     } catch (e) {
-      setMessage(e.message);
+      showMsg(e.message, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const userRole = user?.role || 'trial';
-  const isSuperAdmin = user?.email === 'joselufupa2016@gmail.com';
-  const isPaid = userRole === 'paid' || isSuperAdmin;
+  const getRoleColor = (role) => {
+    switch (role) {
+      case 'admin': return 'bg-rose-500';
+      case 'paid': return 'bg-amber-500';
+      case 'trial': return 'bg-emerald-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  const getRoleLabel = (role) => {
+    switch (role) {
+      case 'admin': return 'Super Admin';
+      case 'paid': return 'Usuario Pagado';
+      case 'trial': return 'Trial (Gratis)';
+      default: return 'Desconocido';
+    }
+  };
+
+  const getTimeRemaining = () => {
+    if (!user?.temporaryUntil) return null;
+    
+    const now = new Date();
+    const expiry = new Date(user.temporaryUntil);
+    const diff = expiry - now;
+    
+    if (diff <= 0) return 'Expirado';
+    
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    return `${days}d ${hours}h ${minutes}m`;
+  };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Force re-render to update countdown
+      if (user?.temporaryUntil) {
+        const now = new Date();
+        const expiry = new Date(user.temporaryUntil);
+        if (now >= expiry) {
+          // Role expired, refresh user data
+          window.location.reload();
+        }
+      }
+    }, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [user?.temporaryUntil]);
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden bg-[#070711] text-white">
+      {/* Animated background */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-24 -left-24 h-[28rem] w-[28rem] rounded-full bg-cyan-500/14 blur-3xl animate-floaty" />
         <div className="absolute top-20 -right-32 h-[32rem] w-[32rem] rounded-full bg-fuchsia-500/12 blur-3xl animate-floaty" style={{ animationDelay: '1.4s' }} />
         <div className="absolute -bottom-48 left-1/2 -translate-x-1/2 h-[38rem] w-[38rem] rounded-full bg-emerald-500/10 blur-3xl animate-floaty" style={{ animationDelay: '2.6s' }} />
       </div>
 
-      <div className="relative mx-auto w-full max-w-7xl px-4 py-8">
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-glow backdrop-blur-xl">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-xs font-semibold tracking-[0.2em] text-white/60">PERFIL</div>
-              <div className="mt-1 text-2xl font-semibold">Mi cuenta</div>
-              <p className="mt-2 text-sm text-white/70">Gestiona tu perfil y rol en la plataforma.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setEditing(!editing)}
-              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10 transition"
-            >
-              {editing ? 'Cancelar' : 'Editar'}
-            </button>
+      <div className="relative mx-auto w-full max-w-4xl px-4 py-12">
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl">
+          <div className="mb-8">
+            <p className="text-[10px] font-bold tracking-[0.35em] text-violet-400/70 uppercase mb-2">Mi Perfil</p>
+            <h1 className="text-4xl font-extrabold tracking-tight text-white mb-2">Información Personal</h1>
+            <p className="text-sm text-white/60">Gestiona tu perfil y preferencias de usuario.</p>
           </div>
 
           {message && (
-            <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
+            <div className={`mb-6 rounded-2xl border px-5 py-4 text-sm font-medium ${
               message.includes('correctamente')
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
-                : 'border-rose-500/30 bg-rose-500/10 text-rose-100'
+                ? 'border-emerald-500/20 bg-emerald-500/8 text-emerald-300'
+                : 'border-rose-500/20 bg-rose-500/8 text-rose-300'
             }`}>
               {message}
             </div>
           )}
 
-          <form onSubmit={handleSave} className="mt-6 space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-8 md:grid-cols-2">
+            {/* Profile Information */}
+            <div className="space-y-6">
               <div>
-                <label className="text-xs font-semibold tracking-[0.18em] text-white/60">Nombre de usuario</label>
-                <input
-                  type="text"
-                  value={form.username}
-                  onChange={e => setForm({ ...form, username: e.target.value })}
-                  disabled={!editing}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white placeholder:text-white/30 outline-none transition focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/20 disabled:opacity-50"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold tracking-[0.18em] text-white/60">Email</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={e => setForm({ ...form, email: e.target.value })}
-                  disabled={!editing}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white placeholder:text-white/30 outline-none transition focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/20 disabled:opacity-50"
-                />
-              </div>
-            </div>
-
-            {(editing || form.newPassword) && (
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="text-xs font-semibold tracking-[0.18em] text-white/60">Contraseña actual</label>
-                  <input
-                    type="password"
-                    value={form.currentPassword}
-                    onChange={e => setForm({ ...form, currentPassword: e.target.value })}
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white placeholder:text-white/30 outline-none transition focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/20"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold tracking-[0.18em] text-white/60">Nueva contraseña (opcional)</label>
-                  <input
-                    type="password"
-                    value={form.newPassword}
-                    onChange={e => setForm({ ...form, newPassword: e.target.value })}
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white placeholder:text-white/30 outline-none transition focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/20"
-                  />
-                </div>
-              </div>
-            )}
-
-            {editing && (
-              <button
-                type="submit"
-                disabled={loading}
-                className="rounded-2xl bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-emerald-400 bg-[length:200%_200%] px-6 py-3 font-semibold text-ink-950 shadow-glow transition hover:opacity-95 hover:animate-shimmer disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loading ? 'Guardando...' : 'Guardar cambios'}
-              </button>
-            )}
-          </form>
-
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <div className="text-xs font-semibold tracking-[0.18em] text-white/60">ROL ACTUAL</div>
-              <div className="mt-2">
-                <div className="flex items-center gap-2">
-                  <div className={`h-3 w-3 rounded-full ${
-                    isSuperAdmin ? 'bg-rose-500' : isPaid ? 'bg-amber-500' : 'bg-emerald-500'
-                  }`} />
-                  <div className="text-sm font-semibold">
-                    {isSuperAdmin ? 'Super Admin' : isPaid ? 'Usuario Pagado' : 'Trial (Gratis)'}
+                <h2 className="text-xl font-semibold mb-4">Datos del Perfil</h2>
+                <form onSubmit={handleSave} className="space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold tracking-widest text-white/60">Nombre de usuario</label>
+                    <input
+                      type="text"
+                      value={form.username}
+                      onChange={e => setForm({ ...form, username: e.target.value })}
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none transition focus:border-violet-400/50 focus:ring-2 focus:ring-violet-400/20"
+                    />
                   </div>
-                </div>
-                <div className="mt-2 text-xs text-white/60">
-                  {isSuperAdmin
-                    ? 'Acceso total a la plataforma y gestión de usuarios.'
-                    : isPaid
-                    ? 'Acceso completo a todas las herramientas.'
-                    : 'Acceso limitado. Mejora a Paid para desbloquear todo.'}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <div className="text-xs font-semibold tracking-[0.18em] text-white/60">ESTADO DE LA CUENTA</div>
-              <div className="mt-2 text-sm">
-                {isPaid ? (
-                  <div className="text-emerald-400">
-                    ✅ Tu cuenta está activa. Disfruta de todas las funciones.
+                  <div>
+                    <label className="text-xs font-semibold tracking-widest text-white/60">Email</label>
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={e => setForm({ ...form, email: e.target.value })}
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none transition focus:border-violet-400/50 focus:ring-2 focus:ring-violet-400/20"
+                    />
                   </div>
-                ) : (
-                  <div className="text-amber-400">
-                    ⚠️ Estás en período de prueba. Algunas funciones están limitadas.
-                    <button
+                  <div>
+                    <label className="text-xs font-semibold tracking-widest text-white/60">Contraseña actual</label>
+                    <input
+                      type="password"
+                      value={form.currentPassword}
+                      onChange={e => setForm({ ...form, currentPassword: e.target.value })}
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none transition focus:border-violet-400/50 focus:ring-2 focus:ring-violet-400/20"
+                    />
                   </div>
                   <div>
                     <label className="text-xs font-semibold tracking-widest text-white/60">Nueva contraseña (opcional)</label>

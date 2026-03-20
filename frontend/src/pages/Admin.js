@@ -75,7 +75,7 @@ const Admin = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/admin/users/${selectedUser.id}`, {
+      const res = await fetch(`http://localhost:5000/api/admin/users/${selectedUser._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -100,7 +100,7 @@ const Admin = () => {
   const handleDeleteUser = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/admin/users/${selectedUser.id}`, {
+      const res = await fetch(`http://localhost:5000/api/admin/users/${selectedUser._id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -128,7 +128,7 @@ const Admin = () => {
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({
-          userId: selectedUser.id,
+          userId: selectedUser._id,
           subject: e.target.subject.value,
           message: e.target.message.value
         })
@@ -238,7 +238,7 @@ const Admin = () => {
                 </thead>
                 <tbody>
                   {users.map((user) => (
-                    <tr key={user.id} className="border-b border-white/5 hover:bg-white/5 transition">
+                    <tr key={user._id} className="border-b border-white/5 hover:bg-white/5 transition">
                       <td className="p-3">
                         <div className="flex items-center gap-2">
                           <div className={`h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white font-bold text-xs`}>

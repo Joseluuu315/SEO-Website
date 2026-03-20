@@ -12,6 +12,16 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env'), override: true });
 
+// ─── URL Validation Helper ───────────────────────────────────────────────────────
+const isValidUrl = (string) => {
+  try {
+    new URL(string);
+    return true;
+  } catch (_) {
+    return false;
+  }
+};
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey_seo_analyzer_2024';
@@ -643,13 +653,20 @@ const checkTemporaryRoles = async () => {
       await User.findByIdAndUpdate(user._id, { role: 'trial', temporaryUntil: null });
       console.log(`Rol temporal expirado para ${user.username} (${user.email})`);
     }
+    
+    if (expiredUsers.length > 0) {
+      console.log(`${expiredUsers.length} usuarios con roles temporales expirados`);
+    }
   } catch (e) {
     console.error('Error checking temporary roles:', e);
   }
 };
 
-// Check temporary roles every hour
-setInterval(checkTemporaryRoles, 3600000);
+// Check temporary roles every 5 minutes for testing
+setInterval(checkTemporaryRoles, 300000);
+
+// Also check on server startup
+setTimeout(checkTemporaryRoles, 5000);
 
 // ─── Reports Routes ──────────────────────────────────────────────────────────
 app.post('/api/reports/generate', authMiddleware, async (req, res) => {
