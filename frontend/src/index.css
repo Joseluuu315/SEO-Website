@@ -8,9 +8,316 @@ html, body, #root {
 
 body {
   margin: 0;
+  color: #EAF0FF;
+}
+
+/* Dark theme (default) */
+body {
   background: radial-gradient(1200px circle at 20% 10%, rgba(0, 212, 255, 0.18), transparent 55%),
               radial-gradient(900px circle at 80% 30%, rgba(168, 85, 247, 0.14), transparent 55%),
               radial-gradient(900px circle at 50% 90%, rgba(34, 197, 94, 0.10), transparent 55%),
               linear-gradient(180deg, #050810 0%, #070A14 100%);
   color: #EAF0FF;
+}
+
+/* Light theme - cleaner and more professional */
+body.light {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%) !important;
+  color: #1e293b !important;
+}
+
+/* Light theme animations - more subtle */
+body.light .animate-floaty {
+  animation: float-light 20s ease-in-out infinite !important;
+}
+
+@keyframes float-light {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  25% { transform: translateY(-10px) rotate(1deg); }
+  50% { transform: translateY(0px) rotate(-1deg); }
+  75% { transform: translateY(-5px) rotate(0.5deg); }
+}
+
+/* Override for specific pages */
+body.light .min-h-screen {
+  background: transparent !important;
+}
+
+/* Light theme card styles - stronger overrides */
+body.light .border-white\/10 {
+  border-color: rgba(226, 232, 240, 0.8) !important;
+}
+
+body.light .bg-white\/5 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+body.light .text-white\/60 {
+  color: rgba(71, 85, 105, 0.8) !important;
+}
+
+body.light .text-white {
+  color: #1e293b !important;
+}
+
+body.light .placeholder\:text-white\/30::placeholder {
+  color: rgba(148, 163, 184, 0.6) !important;
+}
+
+body.light .border-white\/10:focus {
+  border-color: #8b5cf6 !important;
+}
+
+body.light .ring-violet-400\/20 {
+  --tw-ring-color: rgba(139, 92, 246, 0.2) !important;
+}
+
+/* Light theme button styles */
+body.light .from-violet-500 {
+  --tw-gradient-from: #8b5cf6 !important;
+}
+
+body.light .to-fuchsia-500 {
+  --tw-gradient-to: #d946ef !important;
+}
+
+body.light .shadow-violet-500\/20 {
+  --tw-shadow-color: rgba(139, 92, 246, 0.2) !important;
+}
+
+/* Light theme message styles */
+body.light .border-emerald-500\/20 {
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+body.light .bg-emerald-500\/8 {
+  background-color: rgba(16, 185, 129, 0.1) !important;
+}
+
+body.light .text-emerald-300 {
+  color: #059669 !important;
+}
+
+body.light .border-rose-500\/20 {
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+body.light .bg-rose-500\/8 {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+body.light .text-rose-300 {
+  color: #dc2626 !important;
+}
+
+/* Light theme role colors */
+body.light .bg-rose-500 {
+  background-color: #f43f5e !important;
+}
+
+body.light .bg-amber-500 {
+  background-color: #f59e0b !important;
+}
+
+body.light .bg-emerald-500 {
+  background-color: #10b981 !important;
+}
+
+body.light .text-amber-300 {
+  color: #d97706 !important;
+}
+
+body.light .text-amber-400 {
+  color: #f59e0b !important;
+}
+
+body.light .text-amber-700 {
+  color: #b45309 !important;
+}
+
+body.light .text-amber-800 {
+  color: #92400e !important;
+}
+
+body.light .text-emerald-300 {
+  color: #059669 !important;
+}
+
+body.light .text-emerald-700 {
+  color: #047857 !important;
+}
+
+/* Dark theme fixes - prevent light theme overrides */
+body:not(.light) .min-h-screen {
+  background: transparent !important;
+}
+
+/* Ensure dark theme colors are preserved */
+body:not(.light) .border-white\/10 {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+body:not(.light) .bg-white\/5 {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+body:not(.light) .text-white\/60 {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+body:not(.light) .text-white {
+  color: #ffffff !important;
+}
+
+body:not(.light) .placeholder\:text-white\/30::placeholder {
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+body:not(.light) .border-white\/10:focus {
+  border-color: rgba(139, 92, 246, 0.5) !important;
+}
+
+body:not(.light) .ring-violet-400\/20 {
+  --tw-ring-color: rgba(139, 92, 246, 0.2) !important;
+}
+
+body:not(.light) .from-violet-500 {
+  --tw-gradient-from: #8b5cf6 !important;
+}
+
+body:not(.light) .to-fuchsia-500 {
+  --tw-gradient-to: #d946ef !important;
+}
+
+body:not(.light) .shadow-violet-500\/20 {
+  --tw-shadow-color: rgba(139, 92, 246, 0.2) !important;
+}
+
+body:not(.light) .border-emerald-500\/20 {
+  border-color: rgba(16, 185, 129, 0.2) !important;
+}
+
+body:not(.light) .bg-emerald-500\/8 {
+  background-color: rgba(16, 185, 129, 0.08) !important;
+}
+
+body:not(.light) .text-emerald-300 {
+  color: #86efac !important;
+}
+
+body:not(.light) .border-rose-500\/20 {
+  border-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+body:not(.light) .bg-rose-500\/8 {
+  background-color: rgba(239, 68, 68, 0.08) !important;
+}
+
+body:not(.light) .text-rose-300 {
+  color: #fca5a5 !important;
+}
+
+body:not(.light) .bg-rose-500 {
+  background-color: #f43f5e !important;
+}
+
+body:not(.light) .bg-amber-500 {
+  background-color: #f59e0b !important;
+}
+
+body:not(.light) .bg-emerald-500 {
+  background-color: #10b981 !important;
+}
+
+body:not(.light) .text-amber-300 {
+  color: #fcd34d !important;
+}
+
+body:not(.light) .text-amber-400 {
+  color: #fbbf24 !important;
+}
+
+body:not(.light) .text-amber-700 {
+  color: #b45309 !important;
+}
+
+body:not(.light) .text-amber-800 {
+  color: #92400e !important;
+}
+
+body:not(.light) .text-emerald-300 {
+  color: #86efac !important;
+}
+
+body:not(.light) .text-emerald-700 {
+  color: #047857 !important;
+}
+
+/* Additional light theme fixes */
+body.light .bg-gradient-to-r {
+  background-image: linear-gradient(to right, var(--tw-gradient-stops)) !important;
+}
+
+body.light .text-violet-400\/70 {
+  color: #7c3aed !important;
+}
+
+body.light .text-violet-600 {
+  color: #7c3aed !important;
+}
+
+body.light .border-violet-500\/30 {
+  border-color: rgba(124, 58, 237, 0.3) !important;
+}
+
+body.light .bg-violet-50 {
+  background-color: #f5f3ff !important;
+}
+
+body.light .text-violet-700 {
+  color: #6d28d9 !important;
+}
+
+body.light .text-gray-700 {
+  color: #374151 !important;
+}
+
+body.light .text-gray-900 {
+  color: #111827 !important;
+}
+
+body.light .hover\:text-gray-900:hover {
+  color: #111827 !important;
+}
+
+body.light .border-gray-200 {
+  border-color: #e5e7eb !important;
+}
+
+body.light .bg-gray-50 {
+  background-color: #f9fafb !important;
+}
+
+body.light .hover\:bg-gray-100:hover {
+  background-color: #f3f4f6 !important;
+}
+
+body.light .border-gray-300 {
+  border-color: #d1d5db !important;
+}
+
+body.light .bg-white {
+  background-color: #ffffff !important;
+}
+
+body.light .shadow-lg {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+body.light .text-gray-600 {
+  color: #4b5563 !important;
+}
+
+body.light .text-gray-400 {
+  color: #9ca3af !important;
 }

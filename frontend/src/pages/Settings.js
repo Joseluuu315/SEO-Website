@@ -1,191 +1,165 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
-/* ─────────────────────────────────────────────
-   Tiny helper: animated noise grain overlay
-───────────────────────────────────────────── */
-const GRAIN = `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E")`;
-
-/* ─────────────────────────────────────────────
-   Sub-components
-───────────────────────────────────────────── */
-const SectionLabel = ({ children }) => (
-  <p className="mb-5 text-[10px] font-bold tracking-[0.3em] text-white/30 uppercase">{children}</p>
-);
-
-const Field = ({ label, children }) => (
-  <div className="flex flex-col gap-1.5">
-    <label className="text-[11px] font-semibold tracking-widest text-white/40 uppercase">{label}</label>
-    {children}
-  </div>
-);
-
-const Input = (props) => (
-  <input
-    {...props}
-    className={`w-full rounded-xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-white
-      placeholder:text-white/20 outline-none ring-0
-      transition-all duration-200
-      focus:border-violet-400/50 focus:bg-white/6 focus:ring-2 focus:ring-violet-400/15
-      disabled:cursor-not-allowed disabled:opacity-35
-      ${props.className ?? ''}`}
-  />
-);
-
-const Toggle = ({ checked, onChange, label }) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={checked}
-    onClick={() => onChange(!checked)}
-    className="group flex w-full items-center justify-between rounded-xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-white/80 transition hover:bg-white/6"
-  >
-    <span>{label}</span>
-    <span
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-300 ${
-        checked ? 'bg-violet-500' : 'bg-white/15'
-      }`}
-    >
-      <span
-        className={`absolute h-3.5 w-3.5 rounded-full bg-white shadow transition-all duration-300 ${
-          checked ? 'left-[18px]' : 'left-[3px]'
-        }`}
-      />
-    </span>
-  </button>
-);
-
-const Select = ({ value, onChange, options, disabled }) => (
-  <select
-    value={value}
-    onChange={e => onChange(e.target.value)}
-    disabled={disabled}
-    className="w-full rounded-xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-white outline-none
-      focus:border-violet-400/50 focus:ring-2 focus:ring-violet-400/15
-      disabled:opacity-35 disabled:cursor-not-allowed
-      appearance-none cursor-pointer"
-  >
-    {options.map(o => (
-      <option key={o.value} value={o.value} className="bg-[#0d0d1a] text-white">
-        {o.label}
-      </option>
-    ))}
-  </select>
-);
-
-/* ─────────────────────────────────────────────
-   Main Settings component
-───────────────────────────────────────────── */
 const Settings = () => {
   const { user, token, logout } = useAuth();
-
-  /* ── Profile ── */
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ username: '', email: '', currentPassword: '', newPassword: '' });
-  const [message, setMessage] = useState({ text: '', type: '' });
+  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      setForm(f => ({ ...f, username: user.username ?? '', email: user.email ?? '' }));
-    }
-  }, [user]);
-
-  const showMsg = (text, type = 'success') => {
-    setMessage({ text, type });
-    setTimeout(() => setMessage({ text: '', type: '' }), 3500);
-  };
-
-  const handleSave = async (e) => {
-    e.preventDefault();
-    const changed =
-      form.username !== (user?.username ?? '') ||
-      form.email !== (user?.email ?? '') ||
-      form.newPassword;
-
-    if (changed && !form.currentPassword) {
-      showMsg('Debes introducir tu contraseña actual para guardar cambios', 'error');
-      return;
-    }
-
-    const payload = {};
-    if (form.username !== user?.username) payload.username = form.username;
-    if (form.email !== user?.email) payload.email = form.email;
-    if (form.newPassword) payload.password = form.newPassword;
-
-    if (!Object.keys(payload).length) {
-      showMsg('No hay cambios que guardar', 'info');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch('http://localhost:5000/api/auth/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...payload, currentPassword: form.currentPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Error desconocido');
-      showMsg('Perfil actualizado correctamente ✓');
-      setEditing(false);
-      setForm(f => ({ ...f, currentPassword: '', newPassword: '' }));
-    } catch (err) {
-      showMsg(err.message, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* ── Preferences ── */
-  const defaultPrefs = {
+  const [preferences, setPreferences] = useState({
     theme: 'dark',
     defaultAiModel: 'gpt-4o-mini',
     exportFormat: 'pdf',
     notifications: true,
     autoSave: true,
-    language: 'es',
-  };
-  const [preferences, setPreferences] = useState(defaultPrefs);
+    language: 'es'
+  });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setForm({ username: user.username || '', email: user.email || '', currentPassword: '', newPassword: '' });
+    }
+  }, [user]);
 
   useEffect(() => {
     // Load preferences from backend
     const loadPreferences = async () => {
       try {
         const res = await fetch('http://localhost:5000/api/preferences', {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}` }
         });
-        const data = await res.json();
-        if (res.ok && data.preferences) {
-          setPreferences(data.preferences);
+        if (res.ok) {
+          const data = await res.json();
+          const loadedPrefs = data.preferences || preferences;
+          setPreferences(loadedPrefs);
+          
+          // Apply theme immediately
+          if (loadedPrefs.theme === 'light') {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.classList.add('light');
+            document.body.classList.remove('dark');
+            document.body.classList.add('light');
+          } else if (loadedPrefs.theme === 'dark') {
+            document.documentElement.classList.remove('light');
+            document.documentElement.classList.add('dark');
+            document.body.classList.remove('light');
+            document.body.classList.add('dark');
+          } else {
+            // System theme
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (prefersDark) {
+              document.documentElement.classList.remove('light');
+              document.documentElement.classList.add('dark');
+              document.body.classList.remove('light');
+              document.body.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+              document.documentElement.classList.add('light');
+              document.body.classList.remove('dark');
+              document.body.classList.add('light');
+            }
+          }
         }
       } catch (err) {
-        // Fallback to localStorage if backend fails
-        try {
-          const saved = localStorage.getItem('seoAnalyzerPreferences');
-          if (saved) setPreferences(JSON.parse(saved));
-        } catch {}
+        console.log('Using default preferences');
+        // Apply default theme
+        document.documentElement.classList.add('dark');
+        document.body.classList.add('dark');
       }
     };
     loadPreferences();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  const showMsg = (text, type = 'success') => {
+    setMessage(text);
+    setTimeout(() => setMessage(''), 3000);
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!form.currentPassword && (form.newPassword || form.username !== user?.username || form.email !== user?.email)) {
+      showMsg('Debes introducir tu contraseña actual para guardar cambios', 'error');
+      return;
+    }
+    setLoading(true);
+    setMessage('');
+    try {
+      const payload = {};
+      if (form.username !== user?.username) payload.username = form.username;
+      if (form.email !== user?.email) payload.email = form.email;
+      if (form.newPassword) payload.password = form.newPassword;
+      if (Object.keys(payload).length === 0) {
+        showMsg('No hay cambios que guardar', 'info');
+        setLoading(false);
+        return;
+      }
+      const res = await fetch('http://localhost:5000/api/auth/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ ...payload, currentPassword: form.currentPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error');
+      showMsg('Perfil actualizado correctamente');
+      setEditing(false);
+      setForm({ ...form, currentPassword: '', newPassword: '' });
+    } catch (e) {
+      showMsg(e.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSavePreferences = async () => {
     setSaving(true);
     setMessage('');
     try {
-      // Save to backend via API
       const res = await fetch('http://localhost:5000/api/preferences', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(preferences),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Error guardando preferencias');
-      showMsg('Preferencias guardadas ✓');
-    } catch (err) {
-      showMsg(err.message, 'error');
+      if (!res.ok) throw new Error(data.error || 'Error');
+      showMsg('Preferencias guardadas');
+      
+      // Apply theme globally
+      if (preferences.theme === 'light') {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('light');
+        document.body.classList.remove('dark');
+        document.body.classList.add('light');
+      } else if (preferences.theme === 'dark') {
+        document.documentElement.classList.remove('light');
+        document.documentElement.classList.add('dark');
+        document.body.classList.remove('light');
+        document.body.classList.add('dark');
+      } else {
+        // System theme
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (prefersDark) {
+          document.documentElement.classList.remove('light');
+          document.documentElement.classList.add('dark');
+          document.body.classList.remove('light');
+          document.body.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+          document.documentElement.classList.add('light');
+          document.body.classList.remove('dark');
+          document.body.classList.add('light');
+        }
+      }
+    } catch (e) {
+      showMsg(e.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -193,363 +167,374 @@ const Settings = () => {
 
   const handleReset = async () => {
     if (!window.confirm('¿Restablecer todas las preferencias?')) return;
+    const defaults = {
+      theme: 'dark',
+      defaultAiModel: 'gpt-4o-mini',
+      exportFormat: 'pdf',
+      notifications: true,
+      autoSave: true,
+      language: 'es'
+    };
+    setPreferences(defaults);
     try {
       const res = await fetch('http://localhost:5000/api/preferences', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(defaultPrefs),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(defaults),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Error restableciendo preferencias');
-      setPreferences(defaultPrefs);
+      if (!res.ok) throw new Error(data.error || 'Error');
       showMsg('Preferencias restablecidas');
-    } catch (err) {
-      showMsg(err.message, 'error');
+      
+      // Apply theme globally
+      document.documentElement.classList.remove('light');
+      document.documentElement.classList.add('dark');
+      document.body.classList.remove('light');
+      document.body.classList.add('dark');
+    } catch (e) {
+      showMsg(e.message, 'error');
     }
   };
 
-  /* ── Role ── */
-  const userRole = user?.role ?? 'trial';
+  const userRole = user?.role || 'trial';
   const isSuperAdmin = user?.email === 'joselufupa2016@gmail.com';
   const isPaid = userRole === 'paid' || isSuperAdmin;
 
-  const roleLabel = isSuperAdmin ? 'Super Admin' : isPaid ? 'Pro' : 'Trial';
-  const roleColor = isSuperAdmin
-    ? 'from-rose-400 to-orange-400'
-    : isPaid
-    ? 'from-amber-300 to-yellow-500'
-    : 'from-emerald-400 to-teal-400';
-  const roleDesc = isSuperAdmin
-    ? 'Acceso total a la plataforma y gestión de usuarios.'
-    : isPaid
-    ? 'Acceso completo a todas las herramientas y exportaciones.'
-    : 'Acceso limitado. Mejora a Pro para desbloquear todo.';
-
-  /* ── Delete account ── */
-  const handleDeleteAccount = () => {
-    if (!window.confirm('¿Eliminar todos tus datos? Esta acción no se puede deshacer.')) return;
-    // TODO: call backend to delete user data
-    alert('Función no implementada aún');
+  const getThemeClasses = () => {
+    if (preferences.theme === 'light') {
+      return {
+        bg: 'bg-[#f8fafc]',
+        card: 'bg-white border-gray-200 shadow-lg',
+        text: 'text-gray-900',
+        subtext: 'text-gray-600',
+        label: 'text-gray-700',
+        input: 'border-gray-300 bg-gray-50 text-gray-900 placeholder:text-gray-500 focus:border-violet-500 focus:ring-violet-500',
+        toggle: 'border-gray-300 bg-gray-50 hover:bg-gray-100',
+        button: 'bg-violet-600 hover:bg-violet-700 text-white shadow-violet-600/25'
+      };
+    }
+    return {
+      bg: 'bg-[#070711]',
+      card: 'bg-white/5 border-white/10 backdrop-blur-xl',
+      text: 'text-white',
+      subtext: 'text-white/60',
+      label: 'text-white/60',
+      input: 'border-white/10 bg-white/5 text-white placeholder:text-white/30 focus:border-violet-400/50 focus:ring-violet-400/20',
+      toggle: 'border-white/10 bg-white/5 hover:bg-white/10',
+      button: 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-violet-500/20'
+    };
   };
 
-  /* ─────────── render ─────────── */
+  const theme = getThemeClasses();
+
   return (
-    <>
-      {/* ── Google Fonts ── */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+    <div className={`min-h-screen relative overflow-hidden ${theme.bg} ${theme.text}`}>
+      {/* Animated background */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className={`absolute -top-24 -left-24 h-[28rem] w-[28rem] rounded-full blur-3xl animate-floaty ${
+          preferences.theme === 'dark' ? 'bg-cyan-500/14' : 'bg-cyan-400/8'
+        }`} />
+        <div className={`absolute top-20 -right-32 h-[32rem] w-[32rem] rounded-full blur-3xl animate-floaty ${
+          preferences.theme === 'dark' ? 'bg-fuchsia-500/12' : 'bg-fuchsia-400/6'
+        }`} style={{ animationDelay: '1.4s' }} />
+        <div className={`absolute -bottom-48 left-1/2 -translate-x-1/2 h-[38rem] w-[38rem] rounded-full blur-3xl animate-floaty ${
+          preferences.theme === 'dark' ? 'bg-emerald-500/10' : 'bg-emerald-400/5'
+        }`} style={{ animationDelay: '2.6s' }} />
+      </div>
 
-        .settings-root { font-family: 'DM Sans', sans-serif; }
-        .settings-root h1, .settings-root .display { font-family: 'Syne', sans-serif; }
-
-        @keyframes blob {
-          0%,100% { transform: translate(0,0) scale(1); }
-          33%      { transform: translate(30px,-20px) scale(1.07); }
-          66%      { transform: translate(-20px,15px) scale(0.95); }
-        }
-        .blob { animation: blob 9s ease-in-out infinite; }
-        .blob-2 { animation: blob 11s ease-in-out infinite reverse; animation-delay: 2s; }
-        .blob-3 { animation: blob 13s ease-in-out infinite; animation-delay: 4.5s; }
-
-        @keyframes slideIn {
-          from { opacity:0; transform:translateY(12px); }
-          to   { opacity:1; transform:translateY(0); }
-        }
-        .slide-in { animation: slideIn 0.35s ease forwards; }
-
-        @keyframes shimmer {
-          0%   { background-position: 0% 50%; }
-          50%  { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        .btn-gradient {
-          background: linear-gradient(135deg, #7c3aed, #a855f7, #6366f1, #8b5cf6);
-          background-size: 300% 300%;
-          animation: shimmer 4s ease infinite;
-        }
-        .btn-gradient:hover { filter: brightness(1.12); }
-
-        .card {
-          border: 1px solid rgba(255,255,255,0.06);
-          background: rgba(255,255,255,0.03);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-        }
-        .divider { border-color: rgba(255,255,255,0.06); }
-
-        select option { background: #0d0d1a; }
-      `}</style>
-
-      <div className="settings-root min-h-screen relative overflow-x-hidden bg-[#070711] text-white">
-
-        {/* ── Ambient blobs ── */}
-        <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
-          <div className="blob absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-violet-600/12 blur-[100px]" />
-          <div className="blob-2 absolute top-1/3 -right-48 h-[420px] w-[420px] rounded-full bg-fuchsia-500/10 blur-[90px]" />
-          <div className="blob-3 absolute -bottom-60 left-1/3 h-[480px] w-[480px] rounded-full bg-indigo-500/10 blur-[110px]" />
-          <div
-            className="absolute inset-0 opacity-[0.03]"
-            style={{ backgroundImage: GRAIN, backgroundSize: '200px 200px' }}
-          />
-        </div>
-
-        <div className="relative mx-auto w-full max-w-3xl px-4 py-12 pb-24">
-
-          {/* ── Page header ── */}
-          <div className="mb-10 slide-in">
-            <p className="text-[10px] font-bold tracking-[0.35em] text-violet-400/70 uppercase mb-2">Cuenta</p>
-            <h1 className="display text-4xl font-extrabold tracking-tight text-white">Configuración</h1>
-            <p className="mt-2 text-sm text-white/40">Gestiona tu perfil, preferencias y seguridad.</p>
+      <div className="relative mx-auto w-full max-w-4xl px-4 py-12">
+        <div className={`rounded-3xl border p-8 ${theme.card}`}>
+          <div className="mb-8">
+            <p className={`text-[10px] font-bold tracking-[0.35em] uppercase mb-2 ${
+              preferences.theme === 'dark' ? 'text-violet-400/70' : 'text-violet-600'
+            }`}>Ajustes</p>
+            <h1 className={`text-4xl font-extrabold tracking-tight mb-2 ${theme.text}`}>Configuración</h1>
+            <p className={`text-sm ${theme.subtext}`}>Personaliza tu experiencia y ajusta el comportamiento de la herramienta.</p>
           </div>
 
-          {/* ── Toast ── */}
-          {message.text && (
-            <div
-              className={`slide-in mb-6 rounded-2xl border px-5 py-4 text-sm font-medium ${
-                message.type === 'error'
+          {message && (
+            <div className={`mb-6 rounded-2xl border px-5 py-4 text-sm font-medium ${
+              message.includes('correctamente') || message.includes('guardadas')
+                ? preferences.theme === 'dark' 
+                  ? 'border-emerald-500/20 bg-emerald-500/8 text-emerald-300'
+                  : 'border-emerald-500/30 bg-emerald-50 text-emerald-700'
+                : preferences.theme === 'dark'
                   ? 'border-rose-500/20 bg-rose-500/8 text-rose-300'
-                  : message.type === 'info'
-                  ? 'border-white/10 bg-white/5 text-white/60'
-                  : 'border-emerald-500/20 bg-emerald-500/8 text-emerald-300'
-              }`}
-            >
-              {message.text}
+                  : 'border-rose-500/30 bg-rose-50 text-rose-700'
+            }`}>
+              {message}
             </div>
           )}
 
-          {/* ══════════════════════════════════
-              CARD 1 · Perfil
-          ══════════════════════════════════ */}
-          <section className="card rounded-3xl p-7 mb-5 slide-in">
-            <div className="flex items-center justify-between mb-6">
-              <SectionLabel>Perfil</SectionLabel>
-              <button
-                type="button"
-                onClick={() => setEditing(v => !v)}
-                className="text-[11px] font-semibold tracking-widest text-violet-400 hover:text-violet-300 transition uppercase"
-              >
-                {editing ? 'Cancelar' : 'Editar'}
-              </button>
-            </div>
-
-            {/* Avatar area */}
-            <div className="flex items-center gap-4 mb-7">
-              <div className="relative flex-shrink-0 h-16 w-16 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-xl font-bold shadow-lg shadow-violet-500/20">
-                {(user?.username ?? user?.email ?? '?')[0].toUpperCase()}
-              </div>
+          <div className="grid gap-8 lg:grid-cols-2">
+            {/* Profile Settings */}
+            <div className="space-y-6">
               <div>
-                <p className="font-semibold text-white">{user?.username ?? 'Usuario'}</p>
-                <p className="text-xs text-white/40 mt-0.5">{user?.email ?? ''}</p>
-                <span className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-widest uppercase bg-gradient-to-r ${roleColor} bg-clip-text`}
-                  style={{ WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                  ● {roleLabel}
-                </span>
+                <h2 className={`text-xl font-semibold mb-6 ${theme.text}`}>Datos del Perfil</h2>
+                {!editing ? (
+                  <div className={`rounded-xl border p-4 ${theme.card}`}>
+                    <div className="space-y-3">
+                      <div>
+                        <span className={`text-xs font-semibold uppercase tracking-wider ${theme.label}`}>Nombre</span>
+                        <p className={`mt-1 ${theme.text}`}>{user?.username}</p>
+                      </div>
+                      <div>
+                        <span className={`text-xs font-semibold uppercase tracking-wider ${theme.label}`}>Email</span>
+                        <p className={`mt-1 ${theme.text}`}>{user?.email}</p>
+                      </div>
+                      <div>
+                        <span className={`text-xs font-semibold uppercase tracking-wider ${theme.label}`}>Rol</span>
+                        <div className="mt-1">
+                          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold tracking-widest uppercase ${
+                            isSuperAdmin ? 'bg-rose-500' : isPaid ? 'bg-amber-500' : 'bg-emerald-500'
+                          } text-white`}>
+                            {isSuperAdmin ? 'Super Admin' : isPaid ? 'Premium' : 'Trial'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setEditing(true)}
+                      className={`mt-4 w-full rounded-xl px-4 py-2 text-sm font-semibold transition ${theme.button}`}
+                    >
+                      Editar Perfil
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSave} className="space-y-4">
+                    <div>
+                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${theme.label}`}>
+                        Nombre de usuario
+                      </label>
+                      <input
+                        type="text"
+                        value={form.username}
+                        onChange={e => setForm({ ...form, username: e.target.value })}
+                        className={`w-full rounded-xl border px-4 py-3 outline-none transition ${theme.input}`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${theme.label}`}>
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={form.email}
+                        onChange={e => setForm({ ...form, email: e.target.value })}
+                        className={`w-full rounded-xl border px-4 py-3 outline-none transition ${theme.input}`}
+                      />
+                    </div>
+                    {(form.newPassword || form.username !== user?.username || form.email !== user?.email) && (
+                      <>
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${theme.label}`}>
+                            Contraseña actual
+                          </label>
+                          <input
+                            type="password"
+                            value={form.currentPassword}
+                            onChange={e => setForm({ ...form, currentPassword: e.target.value })}
+                            className={`w-full rounded-xl border px-4 py-3 outline-none transition ${theme.input}`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${theme.label}`}>
+                            Nueva contraseña (opcional)
+                          </label>
+                          <input
+                            type="password"
+                            value={form.newPassword}
+                            onChange={e => setForm({ ...form, newPassword: e.target.value })}
+                            className={`w-full rounded-xl border px-4 py-3 outline-none transition ${theme.input}`}
+                          />
+                        </div>
+                      </>
+                    )}
+                    <div className="flex gap-3">
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition disabled:opacity-50 ${theme.button}`}
+                      >
+                        {loading ? 'Guardando...' : 'Guardar'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing(false);
+                          setForm({ username: user?.username || '', email: user?.email || '', currentPassword: '', newPassword: '' });
+                        }}
+                        className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                          preferences.theme === 'dark'
+                            ? 'border-white/10 bg-white/5 text-white/80 hover:bg-white/10'
+                            : 'border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Nombre de usuario">
-                  <Input
-                    type="text"
-                    value={form.username}
-                    onChange={e => setForm({ ...form, username: e.target.value })}
-                    disabled={!editing}
-                    placeholder="tu_nombre"
-                  />
-                </Field>
-                <Field label="Email">
-                  <Input
-                    type="email"
-                    value={form.email}
-                    onChange={e => setForm({ ...form, email: e.target.value })}
-                    disabled={!editing}
-                    placeholder="correo@ejemplo.com"
-                  />
-                </Field>
-              </div>
+            {/* App Preferences */}
+            <div className="space-y-6">
+              <div>
+                <h2 className={`text-xl font-semibold mb-6 ${theme.text}`}>Preferencias de la App</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${theme.label}`}>
+                      Tema
+                    </label>
+                    <select
+                      value={preferences.theme}
+                      onChange={e => {
+                        const newTheme = e.target.value;
+                        setPreferences(p => ({ ...p, theme: newTheme }));
+                        // Apply theme immediately
+                        if (newTheme === 'light') {
+                          document.documentElement.classList.remove('dark');
+                          document.documentElement.classList.add('light');
+                          document.body.classList.remove('dark');
+                          document.body.classList.add('light');
+                        } else if (newTheme === 'dark') {
+                          document.documentElement.classList.remove('light');
+                          document.documentElement.classList.add('dark');
+                          document.body.classList.remove('light');
+                          document.body.classList.add('dark');
+                        } else {
+                          // System theme
+                          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                          if (prefersDark) {
+                            document.documentElement.classList.remove('light');
+                            document.documentElement.classList.add('dark');
+                            document.body.classList.remove('light');
+                            document.body.classList.add('dark');
+                          } else {
+                            document.documentElement.classList.remove('dark');
+                            document.documentElement.classList.add('light');
+                            document.body.classList.remove('dark');
+                            document.body.classList.add('light');
+                          }
+                        }
+                      }}
+                      className={`w-full rounded-xl border px-4 py-3 outline-none transition ${theme.input}`}
+                    >
+                      <option value="dark">🌙 Oscuro</option>
+                      <option value="light">☀️ Claro</option>
+                      <option value="system">💻 Sistema</option>
+                    </select>
+                  </div>
 
-              {editing && (
-                <div className="grid gap-4 sm:grid-cols-2 pt-1">
-                  <Field label="Contraseña actual">
-                    <Input
-                      type="password"
-                      value={form.currentPassword}
-                      onChange={e => setForm({ ...form, currentPassword: e.target.value })}
-                      placeholder="••••••••"
-                    />
-                  </Field>
-                  <Field label="Nueva contraseña (opcional)">
-                    <Input
-                      type="password"
-                      value={form.newPassword}
-                      onChange={e => setForm({ ...form, newPassword: e.target.value })}
-                      placeholder="••••••••"
-                    />
-                  </Field>
-                </div>
-              )}
+                  <div>
+                    <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${theme.label}`}>
+                      Modelo IA por defecto
+                    </label>
+                    <select
+                      value={preferences.defaultAiModel}
+                      onChange={e => setPreferences(p => ({ ...p, defaultAiModel: e.target.value }))}
+                      className={`w-full rounded-xl border px-4 py-3 outline-none transition ${theme.input}`}
+                    >
+                      <option value="gpt-4o-mini">GPT-4o Mini</option>
+                      <option value="gpt-4o">GPT-4o</option>
+                      <option value="claude-3-5-sonnet">Claude Sonnet</option>
+                    </select>
+                  </div>
 
-              {editing && (
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="btn-gradient rounded-xl px-7 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                  >
-                    {loading ? 'Guardando…' : 'Guardar cambios'}
-                  </button>
-                </div>
-              )}
-            </form>
-          </section>
+                  <div>
+                    <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${theme.label}`}>
+                      Formato de exportación
+                    </label>
+                    <select
+                      value={preferences.exportFormat}
+                      onChange={e => setPreferences(p => ({ ...p, exportFormat: e.target.value }))}
+                      className={`w-full rounded-xl border px-4 py-3 outline-none transition ${theme.input}`}
+                    >
+                      <option value="pdf">PDF</option>
+                      <option value="json">JSON</option>
+                      <option value="csv">CSV</option>
+                    </select>
+                  </div>
 
-          {/* ══════════════════════════════════
-              CARD 2 · Preferencias
-          ══════════════════════════════════ */}
-          <section className="card rounded-3xl p-7 mb-5 slide-in" style={{ animationDelay: '0.05s' }}>
-            <SectionLabel>Preferencias</SectionLabel>
+                  <div className="space-y-3">
+                    <label className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition ${theme.toggle}`}>
+                      <span className={`text-sm ${theme.text}`}>Notificaciones</span>
+                      <input
+                        type="checkbox"
+                        checked={preferences.notifications}
+                        onChange={e => setPreferences(p => ({ ...p, notifications: e.target.checked }))}
+                        className="sr-only"
+                      />
+                      <div className={`relative w-11 h-6 rounded-full transition-colors ${
+                        preferences.notifications ? 'bg-violet-500' : 'bg-gray-300'
+                      }`}>
+                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                          preferences.notifications ? 'translate-x-5' : 'translate-x-0'
+                        }`} />
+                      </div>
+                    </label>
 
-            <div className="space-y-3">
-              <Toggle
-                checked={preferences.notifications}
-                onChange={v => setPreferences(p => ({ ...p, notifications: v }))}
-                label="Notificaciones"
-              />
-              <Toggle
-                checked={preferences.autoSave}
-                onChange={v => setPreferences(p => ({ ...p, autoSave: v }))}
-                label="Guardar automáticamente"
-              />
-            </div>
+                    <label className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition ${theme.toggle}`}>
+                      <span className={`text-sm ${theme.text}`}>Guardado automático</span>
+                      <input
+                        type="checkbox"
+                        checked={preferences.autoSave}
+                        onChange={e => setPreferences(p => ({ ...p, autoSave: e.target.checked }))}
+                        className="sr-only"
+                      />
+                      <div className={`relative w-11 h-6 rounded-full transition-colors ${
+                        preferences.autoSave ? 'bg-violet-500' : 'bg-gray-300'
+                      }`}>
+                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                          preferences.autoSave ? 'translate-x-5' : 'translate-x-0'
+                        }`} />
+                      </div>
+                    </label>
+                  </div>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-3">
-              <Field label="Tema">
-                <Select
-                  value={preferences.theme}
-                  onChange={v => {
-                    setPreferences(p => ({ ...p, theme: v }));
-                    // Apply theme immediately
-                    if (v === 'light') {
-                      document.documentElement.classList.remove('dark');
-                      document.body.style.backgroundColor = '#ffffff';
-                      document.body.style.color = '#000000';
-                    } else if (v === 'dark') {
-                      document.documentElement.classList.add('dark');
-                      document.body.style.backgroundColor = '#070711';
-                      document.body.style.color = '#ffffff';
-                    } else {
-                      // System theme
-                      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                      if (prefersDark) {
-                        document.documentElement.classList.add('dark');
-                        document.body.style.backgroundColor = '#070711';
-                        document.body.style.color = '#ffffff';
-                      } else {
-                        document.documentElement.classList.remove('dark');
-                        document.body.style.backgroundColor = '#ffffff';
-                        document.body.style.color = '#000000';
-                      }
-                    }
-                  }}
-                  options={[
-                    { value: 'dark', label: '🌑 Oscuro' },
-                    { value: 'light', label: '☀️ Claro' },
-                    { value: 'system', label: '⚙️ Sistema' },
-                  ]}
-                />
-              </Field>
-              <Field label="Modelo IA">
-                <Select
-                  value={preferences.defaultAiModel}
-                  onChange={v => setPreferences(p => ({ ...p, defaultAiModel: v }))}
-                  options={[
-                    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-                    { value: 'gpt-4o', label: 'GPT-4o' },
-                    { value: 'claude-3-5-sonnet', label: 'Claude Sonnet' },
-                  ]}
-                />
-              </Field>
-              <Field label="Exportar como">
-                <Select
-                  value={preferences.exportFormat}
-                  onChange={v => setPreferences(p => ({ ...p, exportFormat: v }))}
-                  options={[
-                    { value: 'pdf', label: 'PDF' },
-                    { value: 'csv', label: 'CSV' },
-                    { value: 'json', label: 'JSON' },
-                  ]}
-                />
-              </Field>
-            </div>
-
-            <div className="mt-5 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={handleReset}
-                className="text-[11px] font-semibold tracking-widest text-white/30 hover:text-white/60 uppercase transition"
-              >
-                Restablecer
-              </button>
-              <button
-                type="button"
-                onClick={handleSavePreferences}
-                disabled={saving}
-                className="btn-gradient rounded-xl px-7 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                {saving ? 'Guardando…' : 'Guardar preferencias'}
-              </button>
-            </div>
-          </section>
-
-          {/* ══════════════════════════════════
-              CARD 3 · Plan & Cuenta
-          ══════════════════════════════════ */}
-          <section className="card rounded-3xl p-7 slide-in" style={{ animationDelay: '0.1s' }}>
-            <SectionLabel>Plan & Cuenta</SectionLabel>
-
-            {/* Plan pill */}
-            <div className="flex items-center justify-between rounded-2xl border border-white/6 bg-white/3 px-5 py-4 mb-5">
-              <div className="flex items-center gap-3">
-                <div className={`h-2.5 w-2.5 rounded-full bg-gradient-to-br ${roleColor}`} />
-                <div>
-                  <p className="text-sm font-semibold">{roleLabel}</p>
-                  <p className="text-xs text-white/40 mt-0.5">{roleDesc}</p>
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={handleSavePreferences}
+                      disabled={saving}
+                      className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold transition disabled:opacity-50 ${theme.button}`}
+                    >
+                      {saving ? 'Guardando...' : 'Guardar Preferencias'}
+                    </button>
+                    <button
+                      onClick={handleReset}
+                      className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                        preferences.theme === 'dark'
+                          ? 'border-rose-500/20 bg-rose-500/10 text-rose-300 hover:bg-rose-500/15'
+                          : 'border-rose-500/30 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                      }`}
+                    >
+                      Restablecer
+                    </button>
+                  </div>
                 </div>
               </div>
-              {!isPaid && (
-                <button
-                  type="button"
-                  className="btn-gradient rounded-xl px-5 py-2 text-xs font-bold text-white shadow shadow-violet-500/20 transition"
-                >
-                  Mejorar plan
-                </button>
-              )}
             </div>
+          </div>
 
-            <hr className="divider mb-5" />
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                type="button"
-                onClick={logout}
-                className="flex-1 rounded-2xl border border-white/8 bg-white/4 py-3 text-sm font-semibold text-white/70 hover:bg-white/7 hover:text-white transition"
-              >
-                Cerrar sesión
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteAccount}
-                className="flex-1 rounded-2xl border border-rose-500/20 bg-rose-500/6 py-3 text-sm font-semibold text-rose-400 hover:bg-rose-500/12 transition"
-              >
-                Eliminar cuenta
-              </button>
-            </div>
-          </section>
-
+          <div className="mt-8 flex justify-end">
+            <button
+              onClick={logout}
+              className={`rounded-xl border px-6 py-3 font-semibold transition ${
+                preferences.theme === 'dark'
+                  ? 'border-rose-500/20 bg-rose-500/10 text-rose-300 hover:bg-rose-500/15'
+                  : 'border-rose-500/30 bg-rose-50 text-rose-600 hover:bg-rose-100'
+              }`}
+            >
+              Cerrar sesión
+            </button>
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 
