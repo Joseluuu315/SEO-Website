@@ -183,26 +183,81 @@ const Profile = () => {
                   <div className="text-amber-400">
                     ⚠️ Estás en período de prueba. Algunas funciones están limitadas.
                     <button
-                      type="button"
-                      onClick={() => alert('Redirigir a página de pago...')}
-                      className="ml-2 underline hover:text-amber-300 transition"
-                    >
-                      Mejorar plan
-                    </button>
                   </div>
-                )}
+                  <div>
+                    <label className="text-xs font-semibold tracking-widest text-white/60">Nueva contraseña (opcional)</label>
+                    <input
+                      type="password"
+                      value={form.newPassword}
+                      onChange={e => setForm({ ...form, newPassword: e.target.value })}
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none transition focus:border-violet-400/50 focus:ring-2 focus:ring-violet-400/20"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-[length:200%_200%] px-6 py-3 font-semibold text-white shadow-lg shadow-violet-500/20 transition hover:opacity-95 disabled:opacity-50"
+                  >
+                    {loading ? 'Guardando...' : 'Guardar Cambios'}
+                  </button>
+                </form>
               </div>
             </div>
-          </div>
 
-          <div className="mt-6 flex justify-end">
-            <button
-              type="button"
-              onClick={logout}
-              className="rounded-2xl border border-rose-500/25 bg-rose-500/10 px-6 py-3 font-semibold text-rose-100 hover:bg-rose-500/15 transition"
-            >
-              Cerrar sesión
-            </button>
+            {/* Account Status */}
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Estado de la Cuenta</h2>
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Rol Actual</span>
+                      <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold tracking-widest uppercase ${getRoleColor(user?.role)} text-white`}>
+                        {getRoleLabel(user?.role)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/60">
+                      {user?.role === 'admin' ? 'Acceso total a la plataforma y gestión de usuarios.' :
+                       user?.role === 'paid' ? 'Acceso completo a todas las herramientas.' :
+                       'Acceso limitado. Mejora a Paid para desbloquear todo.'}
+                    </p>
+                  </div>
+
+                  {user?.temporaryUntil && (
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-amber-300">Rol Temporal</span>
+                        <span className="text-xs font-bold text-amber-400">
+                          Tiempo restante:
+                        </span>
+                      </div>
+                      <div className="text-lg font-bold text-amber-200 mb-1">
+                        {getTimeRemaining()}
+                      </div>
+                      <p className="text-xs text-amber-400/70">
+                        Expira: {new Date(user.temporaryUntil).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Estado</span>
+                      <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold tracking-widest uppercase ${
+                        user?.temporaryUntil ? 'text-amber-300' : 'text-emerald-300'
+                      }`}>
+                        {user?.temporaryUntil ? '⏰ Temporal' : '✅ Activo'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/60">
+                      {user?.temporaryUntil 
+                        ? 'Tu rol actual es temporal y expirará en la fecha indicada.' 
+                        : 'Tu cuenta está activa y sin restricciones temporales.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

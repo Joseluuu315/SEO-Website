@@ -1,8 +1,31 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Settings from '../pages/Settings';
+import Admin from '../pages/Admin';
 
 const Layout = ({ children }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isSuperAdmin = user?.email === 'joselufupa2016@gmail.com';
+
+  useEffect(() => {
+    if (location.pathname === '/settings') {
+      setShowSettings(true);
+      setShowAdmin(false);
+    } else if (location.pathname === '/admin') {
+      setShowAdmin(true);
+      setShowSettings(false);
+    } else {
+      setShowSettings(false);
+      setShowAdmin(false);
+    }
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -49,25 +72,68 @@ const Layout = ({ children }) => {
               >
                 Informes
               </a>
-              <a
-                href="/settings"
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10 transition"
-              >
-                Ajustes
-              </a>
-              <a
-                href="/profile"
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10 transition"
-              >
-                Perfil
-              </a>
-              <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-2">
-                <div className="h-7 w-7 rounded-xl bg-white/10 text-white/80 grid place-items-center font-semibold">
-                  {user?.username?.slice(0, 2).toUpperCase() || user?.email?.slice(0, 2).toUpperCase() || 'U'}
-                </div>
-                <div className="text-xs text-white/60">
-                  {user?.username || user?.email || 'Usuario'}
-                </div>
+              {/* Dropdown para Perfil y Ajustes */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10 transition"
+                >
+                  <div className="h-7 w-7 rounded-xl bg-white/10 text-white/80 grid place-items-center font-semibold">
+                    {user?.username?.slice(0, 2).toUpperCase() || user?.email?.slice(0, 2).toUpperCase() || 'U'}
+                  </div>
+                  <div className="text-xs text-white/60">
+                    {user?.username || user?.email || 'Usuario'}
+                  </div>
+                  <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7 7" />
+                  </svg>
+                </button>
+                
+                {profileDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-48 rounded-2xl border border-white/10 bg-black/90 backdrop-blur-xl shadow-2xl">
+                    <div className="py-2">
+                      <button
+                        onClick={() => {
+                          navigate('/profile');
+                          setProfileDropdownOpen(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/10 transition"
+                      >
+                        Perfil
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigate('/settings');
+                          setProfileDropdownOpen(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/10 transition"
+                      >
+                        Ajustes
+                      </button>
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => {
+                            navigate('/admin');
+                            setProfileDropdownOpen(false);
+                          }}
+                          className="block w-full text-left px-4 py-2 text-sm text-violet-400 hover:bg-white/10 transition border-t border-white/10 mt-1"
+                        >
+                          🛡️ Administración
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          logout();
+                          setProfileDropdownOpen(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm text-rose-400 hover:bg-rose-500/10 transition border-t border-white/10 mt-1"
+                      >
+                        Cerrar sesión
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </nav>
           </div>
@@ -75,7 +141,11 @@ const Layout = ({ children }) => {
       </header>
 
       {/* Main content */}
-      <main className="relative">{children}</main>
+      <main className="relative">
+        {showSettings && <Settings />}
+        {showAdmin && <Admin />}
+        {!showSettings && !showAdmin && children}
+      </main>
 
       {/* Footer */}
       <footer className="relative z-50 border-t border-white/10 bg-black/40 backdrop-blur-xl">

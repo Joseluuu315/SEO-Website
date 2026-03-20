@@ -53,6 +53,7 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['trial', 'paid', 'admin'], default: 'trial' },
+  temporaryUntil: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
 });
 const User = mongoose.model('User', UserSchema);
@@ -300,58 +301,12 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// ─── Scrape Endpoint ──────────────────────────────────────────────────────────
-const isValidUrl = (string) => {
-  try { new URL(string); return true; } catch { return false; }
-};
-
-app.post('/api/scrape', async (req, res) => {
-  const { url } = req.body;
-  if (!isValidUrl(url))
-    return res.status(400).json({ error: 'URL inválida. Por favor, ingresa una URL válida.' });
-
-  try {
-    const result = await scrapeUrl(url);
-
-    // Save to DB if user token provided
-    const authHeader = req.headers.authorization;
-    if (authHeader) {
-      const token = authHeader.split(' ')[1];
-      if (!token) return res.status(401).json({ error: 'Token inválido' });
-      let decoded;
-      try {
-        decoded = jwt.verify(token, JWT_SECRET);
-      } catch {
-        return res.status(401).json({ error: 'Token inválido' });
-      }
-
-      try {
-        await Analysis.create({ ...result, userId: decoded.id });
-      } catch (err) {
-        console.error('❌ Error guardando análisis:', err?.message || err);
-        return res.status(500).json({ error: 'Error guardando el análisis en Mongo' });
-      }
-    }
-
-    res.json(result);
-  } catch (error) {
-    if (error.response?.status === 404)
-      return res.status(404).json({ error: 'Página no encontrada (404). Verifica la URL.' });
-    if (error.code === 'ECONNABORTED')
-      return res.status(408).json({ error: 'Tiempo de espera agotado. La página tardó demasiado.' });
-    res.status(500).json({ error: 'No se pudo analizar la URL. Verifica que sea accesible.' });
-  }
-});
-
 // ─── Profile Management ─────────────────────────────────────────────────
 app.put('/api/auth/profile', authMiddleware, async (req, res) => {
   try {
     const { username, email, currentPassword, newPassword } = req.body;
     if (!currentPassword && (newPassword || username !== req.user.username || email !== req.user.email)) {
       return res.status(400).json({ error: 'Debes introducir tu contraseña actual para guardar cambios' });
-    }
-    if (newPassword && newPassword.length < 6) {
-      return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
     }
     const payload = {};
     if (username !== req.user.username) payload.username = username;
@@ -375,7 +330,7 @@ app.put('/api/auth/profile', authMiddleware, async (req, res) => {
   }
 });
 
-// ─── Sites Routes ───────────────────────────────────────────────────────────
+// ─── Sites Routes ─────────────────────────────────────────────────
 app.get('/api/sites', authMiddleware, async (req, res) => {
   try {
     const sites = await Site.find({ userId: req.user.id });
@@ -420,6 +375,281 @@ app.delete('/api/sites/:id', authMiddleware, async (req, res) => {
     res.status(500).json({ error: 'Error eliminando sitio' });
   }
 });
+
+// ─── User Preferences Schema ───────────────────────────────────────────────
+const PreferencesSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+  theme: { type: String, enum: ['dark', 'light', 'system'], default: 'dark' },
+  defaultAiModel: { type: String, enum: ['gpt-4o-mini', 'gpt-4o', 'claude-3-5-sonnet'], default: 'gpt-4o-mini' },
+  exportFormat: { type: String, enum: ['pdf', 'csv', 'json'], default: 'pdf' },
+  notifications: { type: Boolean, default: true },
+  autoSave: { type: Boolean, default: true },
+  language: { type: String, enum: ['es', 'en', 'pt'], default: 'es' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+const Preferences = mongoose.model('Preferences', PreferencesSchema);
+
+// ─── Preferences Routes ───────────────────────────────────────────────────────
+app.get('/api/preferences', authMiddleware, async (req, res) => {
+  try {
+    let userPrefs = await Preferences.findOne({ userId: req.user.id });
+    if (!userPrefs) {
+      // Create default preferences for user
+      userPrefs = await Preferences.create({
+        userId: req.user.id,
+        theme: 'dark',
+        defaultAiModel: 'gpt-4o-mini',
+        exportFormat: 'pdf',
+        notifications: true,
+        autoSave: true,
+        language: 'es'
+      });
+    }
+    res.json({ preferences: userPrefs });
+  } catch (e) {
+    res.status(500).json({ error: 'Error obteniendo preferencias' });
+  }
+});
+
+app.put('/api/preferences', authMiddleware, async (req, res) => {
+  try {
+    const { theme, defaultAiModel, exportFormat, notifications, autoSave, language } = req.body;
+    
+    let userPrefs = await Preferences.findOne({ userId: req.user.id });
+    if (!userPrefs) {
+      // Create if doesn't exist
+      userPrefs = await Preferences.create({
+        userId: req.user.id,
+        theme: theme || 'dark',
+        defaultAiModel: defaultAiModel || 'gpt-4o-mini',
+        exportFormat: exportFormat || 'pdf',
+        notifications: notifications !== undefined ? notifications : true,
+        autoSave: autoSave !== undefined ? autoSave : true,
+        language: language || 'es'
+      });
+    } else {
+      // Update existing
+      if (theme !== undefined) userPrefs.theme = theme;
+      if (defaultAiModel !== undefined) userPrefs.defaultAiModel = defaultAiModel;
+      if (exportFormat !== undefined) userPrefs.exportFormat = exportFormat;
+      if (notifications !== undefined) userPrefs.notifications = notifications;
+      if (autoSave !== undefined) userPrefs.autoSave = autoSave;
+      if (language !== undefined) userPrefs.language = language;
+      userPrefs.updatedAt = new Date();
+      await userPrefs.save();
+    }
+    
+    res.json({ message: 'Preferencias guardadas', preferences: userPrefs });
+  } catch (e) {
+    res.status(500).json({ error: 'Error guardando preferencias' });
+  }
+});
+
+// ─── Admin Management Schema ───────────────────────────────────────────────
+const AdminActionSchema = new mongoose.Schema({
+  adminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  action: { type: String, enum: ['CREATE_USER', 'DELETE_USER', 'UPDATE_ROLE', 'UPDATE_USER', 'SEND_EMAIL', 'TEMP_ROLE'], required: true },
+  targetUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  details: { type: mongoose.Schema.Types.Mixed },
+  createdAt: { type: Date, default: Date.now },
+});
+const AdminAction = mongoose.model('AdminAction', AdminActionSchema);
+
+// ─── Admin Routes ───────────────────────────────────────────────────────
+app.get('/api/admin/users', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user.id);
+    if (currentUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+    
+    const users = await User.find({}).select('-password').sort({ createdAt: -1 });
+    res.json({ users });
+  } catch (e) {
+    res.status(500).json({ error: 'Error obteniendo usuarios' });
+  }
+});
+
+app.post('/api/admin/users', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user.id);
+    if (currentUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+    
+    const { username, email, password, role, temporaryUntil } = req.body;
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: 'Username, email y password son requeridos' });
+    }
+    
+    const existing = await User.findOne({ $or: [{ email }, { username }] });
+    if (existing) return res.status(409).json({ error: 'El usuario o email ya existe' });
+    
+    const hashed = await bcrypt.hash(password, 12);
+    const user = await User.create({ 
+      username, 
+      email, 
+      password: hashed, 
+      role: role || 'trial',
+      temporaryUntil: temporaryUntil ? new Date(temporaryUntil) : null 
+    });
+    
+    // Log admin action
+    await AdminAction.create({
+      adminId: req.user.id,
+      action: 'CREATE_USER',
+      targetUserId: user._id,
+      details: { username, email, role, temporaryUntil }
+    });
+    
+    res.status(201).json({ 
+      message: 'Usuario creado exitosamente',
+      user: { id: user._id, username: user.username, email: user.email, role: user.role, temporaryUntil: user.temporaryUntil }
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Error creando usuario' });
+  }
+});
+
+app.put('/api/admin/users/:id', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user.id);
+    if (currentUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+    
+    const { username, email, role, temporaryUntil } = req.body;
+    const targetUser = await User.findById(req.params.id);
+    
+    if (!targetUser) return res.status(404).json({ error: 'Usuario no encontrado' });
+    
+    const payload = {};
+    if (username !== undefined) payload.username = username;
+    if (email !== undefined) payload.email = email;
+    if (role !== undefined) payload.role = role;
+    if (temporaryUntil !== undefined) payload.temporaryUntil = temporaryUntil ? new Date(temporaryUntil) : null;
+    
+    const updated = await User.findByIdAndUpdate(req.params.id, payload, { new: true });
+    
+    // Log admin action
+    await AdminAction.create({
+      adminId: req.user.id,
+      action: 'UPDATE_USER',
+      targetUserId: targetUser._id,
+      details: payload
+    });
+    
+    res.json({ 
+      message: 'Usuario actualizado exitosamente',
+      user: { id: updated._id, username: updated.username, email: updated.email, role: updated.role, temporaryUntil: updated.temporaryUntil }
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Error actualizando usuario' });
+  }
+});
+
+app.delete('/api/admin/users/:id', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user.id);
+    if (currentUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+    
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) return res.status(404).json({ error: 'Usuario no encontrado' });
+    
+    // Cannot delete yourself
+    if (targetUser._id.toString() === req.user.id) {
+      return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta' });
+    }
+    
+    // Delete user data
+    await Analysis.deleteMany({ userId: req.params.id });
+    await Site.deleteMany({ userId: req.params.id });
+    await Preferences.deleteMany({ userId: req.params.id });
+    await User.findByIdAndDelete(req.params.id);
+    
+    // Log admin action
+    await AdminAction.create({
+      adminId: req.user.id,
+      action: 'DELETE_USER',
+      targetUserId: targetUser._id,
+      details: { username: targetUser.username, email: targetUser.email }
+    });
+    
+    res.json({ message: 'Usuario eliminado exitosamente' });
+  } catch (e) {
+    res.status(500).json({ error: 'Error eliminando usuario' });
+  }
+});
+
+app.post('/api/admin/send-email', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user.id);
+    if (currentUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+    
+    const { userId, subject, message } = req.body;
+    const targetUser = await User.findById(userId);
+    
+    if (!targetUser) return res.status(404).json({ error: 'Usuario no encontrado' });
+    
+    // TODO: Implement email sending service
+    // For now, just log the action
+    await AdminAction.create({
+      adminId: req.user.id,
+      action: 'SEND_EMAIL',
+      targetUserId: targetUser._id,
+      details: { subject, message, to: targetUser.email }
+    });
+    
+    res.json({ message: 'Email enviado exitosamente (simulado)' });
+  } catch (e) {
+    res.status(500).json({ error: 'Error enviando email' });
+  }
+});
+
+app.get('/api/admin/actions', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user.id);
+    if (currentUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+    
+    const actions = await AdminAction.find({})
+      .populate('adminId', 'username')
+      .populate('targetUserId', 'username email')
+      .sort({ createdAt: -1 })
+      .limit(50);
+    
+    res.json({ actions });
+  } catch (e) {
+    res.status(500).json({ error: 'Error obteniendo acciones' });
+  }
+});
+
+// ─── Check Temporary Roles (Cron Job Simulation) ───────────────────────────
+const checkTemporaryRoles = async () => {
+  try {
+    const now = new Date();
+    const expiredUsers = await User.find({ 
+      temporaryUntil: { $lte: now },
+      role: { $ne: 'admin' }
+    });
+    
+    for (const user of expiredUsers) {
+      await User.findByIdAndUpdate(user._id, { role: 'trial', temporaryUntil: null });
+      console.log(`Rol temporal expirado para ${user.username} (${user.email})`);
+    }
+  } catch (e) {
+    console.error('Error checking temporary roles:', e);
+  }
+};
+
+// Check temporary roles every hour
+setInterval(checkTemporaryRoles, 3600000);
 
 // ─── Reports Routes ──────────────────────────────────────────────────────────
 app.post('/api/reports/generate', authMiddleware, async (req, res) => {
